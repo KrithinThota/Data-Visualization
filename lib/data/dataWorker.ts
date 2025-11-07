@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 import { DataPoint, ProcessedData } from '@/types/dashboard';
-import { SIMDProcessor } from '@/lib/wasm/simdProcessor';
+import { SIMDProcessor } from '@/lib/wasm/simdProcessor.js';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -17,7 +17,19 @@ interface WorkerMessage {
 
 interface WorkerResponse {
   type: 'DATA_PROCESSED' | 'DATA_AGGREGATED' | 'DATA_FILTERED' | 'STATS_COMPUTED' | 'ERROR';
-  data?: ProcessedData | any;
+  data?: ProcessedData | {
+    min: number;
+    max: number;
+    avg: number;
+    count: number;
+  } | DataPoint[] | {
+    mean: number;
+    median: number;
+    stdDev: number;
+    min: number;
+    max: number;
+    quartiles: [number, number, number];
+  };
   error?: string;
 }
 
@@ -97,21 +109,38 @@ async function processDataWithWASM(data: DataPoint[]): Promise<ProcessedData> {
       min: stats.min,
       max: stats.max,
       avg: stats.mean,
-      count: data.length,
-      processingTime
+      count: data.length
     },
-    filtered: filteredData
+    filtered: filteredData,
+    // Add metadata to include processing time
+    metadata: {
+      processingTime
+    }
   };
 }
 
-// Performance monitoring
+// Enhanced performance monitoring with error handling
 let lastMemoryUsage = 0;
-setInterval(() => {
-  if ('memory' in performance) {
-    const memoryUsage = (performance as any).memory.usedJSHeapSize;
-    if (Math.abs(memoryUsage - lastMemoryUsage) > 1024 * 1024) { // 1MB change
-      console.log(`Worker memory usage: ${(memoryUsage / 1024 / 1024).toFixed(2)} MB`);
-      lastMemoryUsage = memoryUsage;
+const memoryInterval = setInterval(() => {
+  try {
+    if ('memory' in performance) {
+      const memoryUsage = (performance as any).memory?.usedJSHeapSize;
+      if (memoryUsage !== undefined && Math.abs(memoryUsage - lastMemoryUsage) > 1024 * 1024) { // 1MB change
+        console.log(`Worker memory usage: ${(memoryUsage / 1024 / 1024).toFixed(2)} MB`);
+        lastMemoryUsage = memoryUsage;
+        
+        // Check for memory leaks
+        if (memoryUsage > 100 * 1024 * 1024) { // 100MB threshold
+          console.warn('High memory usage detected in worker:', (memoryUsage / 1024 / 1024).toFixed(2), 'MB');
+        }
+      }
     }
+  } catch (error) {
+    console.warn('Memory monitoring failed:', error);
   }
 }, 5000);
+
+// Cleanup on worker termination
+self.addEventListener('beforeunload', () => {
+  clearInterval(memoryInterval);
+});
