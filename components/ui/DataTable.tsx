@@ -7,6 +7,8 @@ interface DataTableProps {
 }
 
 export const DataTable: React.FC<DataTableProps> = ({ data, className = '' }) => {
+  console.log('DataTable received data:', data.length, 'points');
+
   const tableData = useMemo(() => {
     return data.slice(0, 100).map((point, index) => ({
       ...point,

@@ -25,7 +25,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     data: [],
     filters: {},
     timeRange: { start: Date.now() - 3600000, end: Date.now() }, // Last hour
-    chartConfigs: [],
+    chartConfigs: [
+      {
+        id: 'line-chart-1',
+        type: 'line',
+        dataKey: 'value',
+        color: '#3B82F6',
+        visible: true
+      },
+      {
+        id: 'bar-chart-1',
+        type: 'bar',
+        dataKey: 'value',
+        color: '#10B981',
+        visible: true
+      },
+      {
+        id: 'scatter-chart-1',
+        type: 'scatter',
+        dataKey: 'value',
+        color: '#F59E0B',
+        visible: true
+      },
+      {
+        id: 'heatmap-chart-1',
+        type: 'heatmap',
+        dataKey: 'value',
+        color: '#EF4444',
+        visible: true
+      }
+    ],
     performance: {
       fps: 0,
       memoryUsage: 0,
@@ -41,6 +70,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize data generator and memory management
   useEffect(() => {
+    console.log('🚀 DataProvider: Initializing data generator...');
     dataGeneratorRef.current = new DataGenerator();
 
     // Register this component for memory leak detection
@@ -50,17 +80,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const unregisterCleanup = registerComponentCleanup(
       'DataProvider',
       () => {
+        console.log('Cleaning up DataProvider...');
         // Stop data generator
         if (dataGeneratorRef.current) {
           dataGeneratorRef.current.stopStreaming();
         }
-        
+
         // Clear performance interval
         if (performanceIntervalRef.current) {
           clearInterval(performanceIntervalRef.current);
           performanceIntervalRef.current = null;
         }
-        
+
         // Clear data cache
         dataCache.clear();
       },
@@ -73,81 +104,107 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Start data streaming with WebAssembly processing
-  useEffect(() => {
-    if (!dataGeneratorRef.current) return;
+  const processIncomingData = useCallback(async (newData: DataPoint[]) => {
+    console.log('🔄 DataProvider: Processing incoming data batch of', newData.length, 'points');
+    const startTime = performance.now();
 
-    const processIncomingData = async (newData: DataPoint[]) => {
-      const startTime = performance.now();
+    try {
+      // Use cached data processing if available
+      const cacheKey = { data: newData, filters: state.filters, timeRange: state.timeRange };
+      let processedData = dataCache.get(cacheKey) as DataPoint[] | undefined;
 
-      try {
-        // Use cached data processing if available
-        const cacheKey = { data: newData, filters: state.filters, timeRange: state.timeRange };
-        let processedData = dataCache.get(cacheKey) as DataPoint[] | undefined;
-
-        if (!processedData) {
-          // Apply filters using SIMD if available
-          processedData = newData;
-          if (state.filters.valueRange) {
-            processedData = await SIMDProcessor.filterLargeDataset(
-              processedData,
-              state.filters.valueRange[0]
-            );
-          }
-
-          // Apply time range filtering
-          processedData = processedData.filter(point =>
-            point.timestamp >= state.timeRange.start &&
-            point.timestamp <= state.timeRange.end
+      if (!processedData) {
+        // Apply filters using SIMD if available
+        processedData = newData;
+        if (state.filters.valueRange) {
+          processedData = await SIMDProcessor.filterLargeDataset(
+            processedData,
+            state.filters.valueRange[0]
           );
-
-          // Apply category filtering (support both single category and categories array)
-          if (state.filters.category) {
-            processedData = processedData.filter(point =>
-              point.category === state.filters.category
-            );
-          } else if (state.filters.categories && state.filters.categories.length > 0) {
-            processedData = processedData.filter(point =>
-              state.filters.categories!.includes(point.category)
-            );
-          }
-
-          // Cache the processed data
-          dataCache.set(cacheKey, processedData);
         }
 
-        // Update state with processed data
-        setState(prev => ({
+        // Apply time range filtering
+        processedData = processedData.filter(point =>
+          point.timestamp >= state.timeRange.start &&
+          point.timestamp <= state.timeRange.end
+        );
+
+        // Apply category filtering (support both single category and categories array)
+        if (state.filters.category) {
+          processedData = processedData.filter(point =>
+            point.category === state.filters.category
+          );
+        } else if (state.filters.categories && state.filters.categories.length > 0) {
+          processedData = processedData.filter(point =>
+            state.filters.categories!.includes(point.category)
+          );
+        }
+
+        // Cache the processed data
+        dataCache.set(cacheKey, processedData);
+      }
+
+      // Update state with processed data
+      setState(prev => {
+        const newDataArray = [...prev.data.slice(-990), ...processedData];
+        console.log('✅ DataProvider: Updated state with', newDataArray.length, 'total data points');
+        return {
           ...prev,
-          data: [...prev.data.slice(-990), ...processedData], // Keep last 1000 points
+          data: newDataArray,
           isLoading: false,
           performance: {
             ...prev.performance,
             dataProcessingTime: performance.now() - startTime
           }
-        }));
+        };
+      });
 
-        // Update memory monitoring
-        enhancedLeakDetector.updateAccess(cacheKey);
+      // Update memory monitoring
+      enhancedLeakDetector.updateAccess(cacheKey);
 
-      } catch (error) {
-        console.error('Data processing error:', error);
-        // Fallback to basic processing
-        setState(prev => ({
-          ...prev,
-          data: [...prev.data.slice(-990), ...newData],
-          isLoading: false
-        }));
-      }
-    };
+    } catch (error) {
+      console.error('Data processing error:', error);
+      // Fallback to basic processing
+      setState(prev => ({
+        ...prev,
+        data: [...prev.data.slice(-990), ...newData],
+        isLoading: false
+      }));
+    }
+  }, [state.filters, state.timeRange]);
 
+  useEffect(() => {
+    if (!dataGeneratorRef.current) {
+      console.log('DataGenerator not initialized yet');
+      return;
+    }
+
+    console.log('🔄 DataProvider: Starting data streaming...');
     dataGeneratorRef.current.startStreaming(processIncomingData);
 
     return () => {
       if (dataGeneratorRef.current) {
+        console.log('⏹️ DataProvider: Stopping data streaming...');
         dataGeneratorRef.current.stopStreaming();
       }
     };
-  }, [state.filters, state.timeRange]);
+  }, [processIncomingData]);
+
+  // Force initial data load if no data is present
+  useEffect(() => {
+    if (state.data.length === 0 && !state.isLoading && dataGeneratorRef.current) {
+      console.log('🚀 DataProvider: No data present, generating initial batches...');
+      // Generate a few initial batches to get started
+      for (let i = 0; i < 5; i++) {
+        const batch = dataGeneratorRef.current.generateInitialBatch();
+        if (batch.length > 0) {
+          console.log('📦 DataProvider: Processing initial batch', i + 1, 'with', batch.length, 'points');
+          processIncomingData(batch);
+        }
+      }
+      console.log('✅ DataProvider: Initial data generation completed');
+    }
+  }, [state.data.length, state.isLoading, processIncomingData]);
 
   // Actions for external control
   const updateFilters = useCallback((filters: Partial<FilterConfig>) => {

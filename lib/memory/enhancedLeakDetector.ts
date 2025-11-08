@@ -169,7 +169,7 @@ export class EnhancedLeakDetector {
     }
 
     // Detect orphaned objects
-    const orphanedReports = this.detectOrphanedObjects();
+    const orphanedReports = this.detectOrphanedObjects(snapshots);
     reports.push(...orphanedReports);
 
     // Detect memory fragmentation
@@ -180,11 +180,15 @@ export class EnhancedLeakDetector {
   }
 
   private detectEventListenerLeak(snapshots: MemorySnapshot[]): boolean {
+    // Parameter included for interface compatibility, currently unused in heuristic detection
+    // Future enhancement: integrate memory snapshots for more accurate leak detection
+    void snapshots; // Explicitly mark as intentionally unused
+
     // Check for objects that might have event listeners
     // This is a heuristic-based detection
     let suspiciousObjects = 0;
 
-    for (const [id, ref] of this.objectRegistry) {
+    for (const ref of this.objectRegistry.values()) {
       if (ref.type.includes('Component') || ref.type.includes('Element')) {
         // Check if object has been alive for too long without access
         const age = Date.now() - ref.created;
@@ -200,10 +204,13 @@ export class EnhancedLeakDetector {
   }
 
   private detectTimerLeak(snapshots: MemorySnapshot[]): boolean {
+    // Parameter included for interface compatibility, currently unused in heuristic detection
+    void snapshots; // Explicitly mark as intentionally unused
+
     // Check for timer-related objects that haven't been cleaned up
     let timerObjects = 0;
 
-    for (const [id, ref] of this.objectRegistry) {
+    for (const ref of this.objectRegistry.values()) {
       if (ref.type.includes('Timeout') || ref.type.includes('Interval')) {
         const age = Date.now() - ref.created;
         if (age > 300000) { // 5 minutes
@@ -216,10 +223,13 @@ export class EnhancedLeakDetector {
   }
 
   private detectDOMReferenceLeak(snapshots: MemorySnapshot[]): boolean {
+    // Parameter included for interface compatibility, currently unused in heuristic detection
+    void snapshots; // Explicitly mark as intentionally unused
+
     // Check for objects that reference DOM elements
     let domReferences = 0;
 
-    for (const [id, ref] of this.objectRegistry) {
+    for (const ref of this.objectRegistry.values()) {
       if (ref.references.some((refId: string) => refId.includes('Element') || refId.includes('Node'))) {
         const age = Date.now() - ref.created;
         if (age > 180000) { // 3 minutes
@@ -232,6 +242,9 @@ export class EnhancedLeakDetector {
   }
 
   private detectCircularReferenceLeak(snapshots: MemorySnapshot[]): boolean {
+    // Parameter included for interface compatibility, currently unused in graph-based detection
+    void snapshots; // Explicitly mark as intentionally unused
+
     // Detect circular references in the reference graph
     const visited = new Set<string>();
     const recursionStack = new Set<string>();
@@ -264,10 +277,13 @@ export class EnhancedLeakDetector {
   }
 
   private detectSubscriptionLeak(snapshots: MemorySnapshot[]): boolean {
+    // Parameter included for interface compatibility, currently unused in heuristic detection
+    void snapshots; // Explicitly mark as intentionally unused
+
     // Check for subscription-like objects
     let subscriptionObjects = 0;
 
-    for (const [id, ref] of this.objectRegistry) {
+    for (const ref of this.objectRegistry.values()) {
       if (ref.type.includes('Subscription') || ref.type.includes('Observable')) {
         const age = Date.now() - ref.created;
         if (age > 300000) { // 5 minutes
@@ -279,11 +295,14 @@ export class EnhancedLeakDetector {
     return subscriptionObjects > 10;
   }
 
-  private detectOrphanedObjects(): MemoryLeakReport[] {
+  private detectOrphanedObjects(snapshots: MemorySnapshot[] = []): MemoryLeakReport[] {
+    // Parameter included for interface compatibility, currently unused in registry-based detection
+    void snapshots; // Explicitly mark as intentionally unused
+
     const reports: MemoryLeakReport[] = [];
     const now = Date.now();
 
-    for (const [id, ref] of this.objectRegistry) {
+    for (const ref of this.objectRegistry.values()) {
       const age = now - ref.created;
       const timeSinceAccess = now - ref.lastAccessed;
 

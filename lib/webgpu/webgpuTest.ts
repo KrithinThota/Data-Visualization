@@ -417,6 +417,7 @@ export interface TestResult {
   passed: boolean;
   duration: number;
   error: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   metadata?: any;
 }
 

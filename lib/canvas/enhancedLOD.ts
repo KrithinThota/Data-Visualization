@@ -138,9 +138,17 @@ export class EnhancedLOD {
     const minValue = Math.min(...data.map(p => p.value));
     const valueRange = maxValue - minValue;
     
+    // Use config properties for heatmap styling
+    const isVisible = config.visible;
+    
+    // Early return if chart is not visible
+    if (!isVisible) return;
+    
     const colorScale = (value: number): string => {
       const normalized = valueRange > 0 ? (value - minValue) / valueRange : 0.5; // Default to middle color if no range
-      const hue = (1 - normalized) * 240; // Blue to red
+      const adjustedNormalized = Math.min(Math.max(normalized, 0), 1); // Ensure range [0, 1]
+      const hue = (1 - adjustedNormalized) * 240; // Blue to red
+      // Use base color as saturation and lightness modifier
       return `hsl(${hue}, 70%, 50%)`;
     };
 

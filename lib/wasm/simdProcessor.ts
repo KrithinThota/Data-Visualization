@@ -1,5 +1,5 @@
 import { DataPoint } from '@/types/dashboard';
-import { WasmLoader } from './wasmLoader';
+import { WasmLoader, AggregatedData } from './wasmLoader';
 
 export class SIMDProcessor {
   private static readonly SIMD_THRESHOLD = 1000; // Use SIMD for datasets larger than this
@@ -274,7 +274,14 @@ export class SIMDProcessor {
 
 export interface ProcessedChunk {
   data: DataPoint[];
-  aggregated: any; // AggregatedData type
-  stats: any; // Statistics type
+  aggregated: AggregatedData | null;
+  stats: {
+    mean: number;
+    median: number;
+    stdDev: number;
+    min: number;
+    max: number;
+    quartiles: [number, number, number];
+  } | null;
   timestamp: number;
 }

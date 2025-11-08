@@ -42,13 +42,13 @@ export function usePerformanceMonitor(webgpuIntegration?: WebGPUIntegration) {
     memoryStats?: {
       totalPooledSize?: number;
       pooledBuffers?: number;
-    };
+    } | null;
     computeMetrics?: {
       computeTime?: number;
-    };
+    } | null;
     rendererMetrics?: {
       gpuMemoryUsage?: number;
-    };
+    } | null;
   } | null>(null);
 
   // Register this hook with enhanced leak detector
@@ -77,10 +77,9 @@ export function usePerformanceMonitor(webgpuIntegration?: WebGPUIntegration) {
     const updateGPUMetrics = () => {
       const gpuMetrics = webgpuIntegration.getPerformanceMetrics();
       gpuMetricsRef.current = gpuMetrics;
-      
+
       // Update memory access for leak detection
       enhancedLeakDetector.updateAccess(gpuMetrics);
-      enhancedLeakDetector.updateAccess(metrics);
       memory.updateMemoryAccess();
     };
 
@@ -90,25 +89,12 @@ export function usePerformanceMonitor(webgpuIntegration?: WebGPUIntegration) {
     return () => {
       clearInterval(gpuInterval);
     };
-  }, [webgpuIntegration, memory, metrics]);
+  }, [webgpuIntegration, memory]);
 
-  useEffect(() => {
-    const observer = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (entry.entryType === 'measure') {
-          renderTimesRef.current.push(entry.duration);
-          if (renderTimesRef.current.length > 60) {
-            renderTimesRef.current.shift();
-          }
-        }
-      }
-    });
-
-    observer.observe({ entryTypes: ['measure'] });
-
-    const fpsInterval = setInterval(() => {
-      const now = performance.now();
-      const delta = now - lastTimeRef.current;
+  const updateMetrics = useCallback(() => {
+    const now = performance.now();
+    const delta = now - lastTimeRef.current;
+    if (delta >= 1000) { // Update every second
       const fps = Math.round((frameCountRef.current * 1000) / delta);
 
       // Calculate average render time
@@ -134,8 +120,8 @@ export function usePerformanceMonitor(webgpuIntegration?: WebGPUIntegration) {
       const memoryStats = memoryMonitor.getStats();
       const enhancedMemoryUsage = Math.max(memoryUsage, memoryStats.memoryUsage / 1024 / 1024 || 0);
 
-      setMetrics({
-        fps,
+      const newMetrics = {
+        fps: fps || 60, // Default to 60 if calculation fails
         memoryUsage: enhancedMemoryUsage,
         renderTime: avgRenderTime,
         dataProcessingTime: computeTime, // Use GPU compute time as data processing time
@@ -145,23 +131,49 @@ export function usePerformanceMonitor(webgpuIntegration?: WebGPUIntegration) {
         renderTimeGPU,
         webgpuEnabled,
         rendererType: rendererType as 'webgpu' | 'canvas'
-      });
+      };
+
+      setMetrics(newMetrics);
 
       frameCountRef.current = 0;
       lastTimeRef.current = now;
-    }, 1000);
+    }
+  }, []);
+
+  useEffect(() => {
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.entryType === 'measure') {
+          renderTimesRef.current.push(entry.duration);
+          if (renderTimesRef.current.length > 60) {
+            renderTimesRef.current.shift();
+          }
+        }
+      }
+    });
+
+    observer.observe({ entryTypes: ['measure'] });
+
+    // Initialize lastTimeRef
+    lastTimeRef.current = performance.now();
+
+    const fpsInterval = setInterval(updateMetrics, 1000);
 
     return () => {
       observer.disconnect();
       clearInterval(fpsInterval);
     };
-  }, []);
+  }, [updateMetrics]);
 
   const measureRenderTime = useCallback((name: string, fn: () => void) => {
     performance.mark(`${name}-start`);
     fn();
     performance.mark(`${name}-end`);
     performance.measure(name, `${name}-start`, `${name}-end`);
+  }, []);
+
+  const incrementFrameCount = useCallback(() => {
+    frameCountRef.current++;
   }, []);
 
   const measureInteractionLatency = useCallback((startTime: number) => {
@@ -177,7 +189,8 @@ export function usePerformanceMonitor(webgpuIntegration?: WebGPUIntegration) {
     metrics,
     measureRenderTime,
     measureInteractionLatency,
-    startInteractionMeasurement
+    startInteractionMeasurement,
+    incrementFrameCount
   };
 }
 
@@ -212,35 +225,36 @@ export function useWebGPUMonitor(webgpuIntegration?: WebGPUIntegration) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!webgpuIntegration) {
-      return; // Early return, state will be set by default values
-    }
+  const updateGPUMetrics = useCallback(() => {
+    if (!webgpuIntegration) return;
 
-    const updateMetrics = () => {
-      const metrics = webgpuIntegration.getPerformanceMetrics();
-      
-      setGpuMetrics({
-        supported: metrics.gpuSupported,
-        initialized: webgpuIntegration.isWebGPUSupported(),
-        memoryUsage: metrics.memoryStats?.totalPooledSize || 0,
-        computeTime: metrics.computeMetrics?.computeTime || 0,
-        renderTime: metrics.rendererMetrics?.gpuMemoryUsage || 0,
-        bufferCount: metrics.memoryStats?.pooledBuffers || 0,
-        shaderCompilationTime: 0 // Would need to track shader compilation
-      });
+    const metrics = webgpuIntegration.getPerformanceMetrics();
 
-      // Update memory access for leak detection and monitoring
-      enhancedLeakDetector.updateAccess(memory);
-      enhancedLeakDetector.updateAccess(metrics);
-      memory.updateMemoryAccess();
+    const newMetrics = {
+      supported: metrics.gpuSupported,
+      initialized: webgpuIntegration.isWebGPUSupported(),
+      memoryUsage: metrics.memoryStats?.totalPooledSize || 0,
+      computeTime: metrics.computeMetrics?.computeTime || 0,
+      renderTime: metrics.rendererMetrics?.gpuMemoryUsage || 0,
+      bufferCount: metrics.memoryStats?.pooledBuffers || 0,
+      shaderCompilationTime: 0 // Would need to track shader compilation
     };
 
-    updateMetrics();
-    const interval = setInterval(updateMetrics, 1000);
+    setGpuMetrics(newMetrics);
+
+    // Update memory access for leak detection and monitoring
+    enhancedLeakDetector.updateAccess(memory);
+    enhancedLeakDetector.updateAccess(metrics);
+    memory.updateMemoryAccess();
+  }, [webgpuIntegration, memory]);
+
+  useEffect(() => {
+    if (!webgpuIntegration) return;
+
+    const interval = setInterval(updateGPUMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, [webgpuIntegration, memory]);
+  }, [updateGPUMetrics]);
 
   return {
     ...gpuMetrics,

@@ -27,7 +27,7 @@
     "paths": {
       "@/*": ["./*"]
     },
-    "types": ["node", "webworker", "@webgpu/types"]
+    "types": ["node", "@webgpu/types"]
   },
   "include": [
     "next-env.d.ts",

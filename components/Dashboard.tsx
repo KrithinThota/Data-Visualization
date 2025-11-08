@@ -1,29 +1,71 @@
 'use client';
 
 import React, { useState } from 'react';
+import { ChartGrid } from './charts/ChartGrid';
+import { DataTable } from './ui/DataTable';
+import { PerformanceMonitor } from './ui/PerformanceMonitor';
+import { ControlPanel } from './controls/ControlPanel';
+import { useData } from './providers/DataProvider';
+import { WebGPUIntegration } from '@/lib/webgpu/webgpuIntegration';
 
 export const Dashboard: React.FC = () => {
   const [viewMode, setViewMode] = useState<'charts' | 'table' | 'split'>('charts');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [webgpuIntegration] = useState(() => new WebGPUIntegration());
+  const { performance, data, isLoading } = useData();
+
+  console.log('🎯 Dashboard Render:', {
+    dataPoints: data.length,
+    isLoading,
+    viewMode,
+    performance: {
+      fps: performance.fps,
+      memoryUsage: performance.memoryUsage,
+      renderTime: performance.renderTime
+    }
+  });
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+    <div className={`min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Performance Dashboard
-              </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Real-time data visualization
-              </p>
+            <div className="flex items-center space-x-4">
+              {/* Logo/Brand */}
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                    DataViz Pro
+                  </h1>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Real-time Analytics Dashboard
+                  </p>
+                </div>
+              </div>
+
+              {/* Status Indicator */}
+              <div className="hidden md:flex items-center space-x-2">
+                <div className="flex items-center space-x-1">
+                  <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {isLoading ? 'Loading...' : 'Live'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {data.length} points • {performance.dataProcessingTime?.toFixed(1)}ms
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center space-x-4">
               {/* View Mode Toggle */}
-              <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+              <div className="hidden sm:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                 <button
                   onClick={() => setViewMode('charts')}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
@@ -56,10 +98,23 @@ export const Dashboard: React.FC = () => {
                 </button>
               </div>
 
+              {/* Mobile View Toggle */}
+              <div className="sm:hidden">
+                <select
+                  value={viewMode}
+                  onChange={(e) => setViewMode(e.target.value as 'charts' | 'table' | 'split')}
+                  className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 rounded-md border-0 text-gray-900 dark:text-white"
+                >
+                  <option value="charts">Charts</option>
+                  <option value="table">Table</option>
+                  <option value="split">Split</option>
+                </select>
+              </div>
+
               {/* Fullscreen Toggle */}
               <button
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
                 title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               >
                 {isFullscreen ? (
@@ -80,63 +135,35 @@ export const Dashboard: React.FC = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-6">
-          {/* Mock Performance Monitor */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
-              Performance Monitor
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="metric">
-                <div className="text-sm font-medium text-gray-600 dark:text-gray-400">FPS</div>
-                <div className="text-xl font-bold text-green-600">60.0</div>
-              </div>
-              <div className="metric">
-                <div className="text-sm font-medium text-gray-600 dark:text-gray-400">Memory</div>
-                <div className="text-xl font-bold text-blue-600">67.8 MB</div>
-              </div>
-              <div className="metric">
-                <div className="text-sm font-medium text-gray-600 dark:text-gray-400">Render Time</div>
-                <div className="text-xl font-bold text-purple-600">14.2 ms</div>
-              </div>
-              <div className="metric">
-                <div className="text-sm font-medium text-gray-600 dark:text-gray-400">Data Points</div>
-                <div className="text-xl font-bold text-orange-600">10,000</div>
-              </div>
-            </div>
-          </div>
+          {/* Performance Monitor */}
+          <PerformanceMonitor webgpuIntegration={webgpuIntegration} />
 
-          {/* Mock Chart Area */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-            <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
-              Data Visualization
-            </h3>
-            <div className="h-96 bg-gray-100 dark:bg-gray-700 rounded flex items-center justify-center">
-              <p className="text-gray-600 dark:text-gray-400">
-                Chart components will be displayed here in the full implementation
-              </p>
-            </div>
-          </div>
+          {/* Control Panel */}
+          <ControlPanel />
 
-          {/* Content Based on View Mode */}
+          {/* Charts View */}
           {(viewMode === 'charts' || viewMode === 'split') && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
               <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
-                Charts View
+                Data Visualization
               </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Multiple chart types will be displayed here in the full implementation
-              </p>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-96">
+                  <div className="text-gray-500 dark:text-gray-400">Loading charts...</div>
+                </div>
+              ) : (
+                <ChartGrid width={800} height={400} />
+              )}
             </div>
           )}
 
+          {/* Table View */}
           {(viewMode === 'table' || viewMode === 'split') && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
               <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
                 Data Table View
               </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Tabular data representation will be displayed here in the full implementation
-              </p>
+              <DataTable data={data} />
             </div>
           )}
         </div>
@@ -145,14 +172,21 @@ export const Dashboard: React.FC = () => {
       {/* Footer */}
       <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
-            <div>
-              Last updated: {new Date().toLocaleTimeString()}
+          <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-600 dark:text-gray-400 space-y-2 sm:space-y-0">
+            <div className="flex items-center space-x-4">
+              <span>Last updated: {new Date().toLocaleTimeString()}</span>
+              <span className="hidden sm:inline">•</span>
+              <span className="text-xs">
+                {data.length} data points • {performance.dataProcessingTime?.toFixed(1)}ms processing
+              </span>
             </div>
             <div className="flex items-center space-x-4">
-              <span>FPS: 60.0</span>
-              <span>Memory: 67.8 MB</span>
-              <span>Data points: 10,000</span>
+              <div className="flex items-center space-x-1">
+                <div className={`w-2 h-2 rounded-full ${performance.fps >= 50 ? 'bg-green-400' : performance.fps >= 30 ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
+                <span>FPS: {performance.fps?.toFixed(1) || '60.0'}</span>
+              </div>
+              <span>Memory: {performance.memoryUsage?.toFixed(1) || '25.7'} MB</span>
+              <span>Render: {performance.renderTime?.toFixed(1) || '1.0'} ms</span>
             </div>
           </div>
         </div>

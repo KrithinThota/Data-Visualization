@@ -69,6 +69,8 @@ export class WeakCache<K extends object, V> {
 
     // Calculate hits from cache entries (can't iterate WeakMap directly)
     for (const [key, count] of this.accessCounts) {
+      // count is intentionally not used here as we get the actual access count from the entry
+      void count; // Explicitly mark as intentionally unused
       const entry = this.cache.get(key);
       if (entry) {
         totalHits += entry.accessCount;

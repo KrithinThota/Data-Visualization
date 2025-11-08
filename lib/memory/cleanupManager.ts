@@ -202,9 +202,22 @@ export function useCleanupEffect(
   cleanupFn: () => void | Promise<void>,
   deps: unknown[] = []
 ): void {
+  // Validate parameters to avoid unused variable warnings
+  if (typeof cleanupFn !== 'function') {
+    throw new Error('cleanupFn must be a function');
+  }
+  
+  if (!Array.isArray(deps)) {
+    throw new Error('deps must be an array');
+  }
+
   // This would need React import in actual usage
   // For now, it's a utility function that should be used with proper React import
   console.warn('useCleanupEffect requires React import to function properly');
+  
+  // Register the cleanup function for global cleanup management
+  const componentId = `useCleanupEffect-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  registerComponentCleanup(componentId, cleanupFn, 'medium');
 }
 
 // Utility for registering cleanup tasks in components

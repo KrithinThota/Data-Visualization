@@ -345,6 +345,11 @@ export class PerformanceAlertSystem {
     );
   }
 
+  addAlert(alert: PerformanceAlert): void {
+    this.activeAlerts.set(alert.id, alert);
+    this.listeners.forEach(listener => listener(alert));
+  }
+
   addListener(callback: (alert: PerformanceAlert) => void): void {
     this.listeners.add(callback);
   }
@@ -401,7 +406,7 @@ export class MemoryLeakAlertBridge {
     };
 
     // Add to alert system
-    this.alertSystem.addListener(() => {}); // Placeholder for proper integration
+    this.alertSystem.addAlert(alert);
   }
 }
 
@@ -434,7 +439,7 @@ export class GPUAlertBridge {
       };
 
       // Add to alert system
-      this.alertSystem.addListener(() => {}); // Placeholder for proper integration
+      this.alertSystem.addAlert(alert);
     }
   }
 }

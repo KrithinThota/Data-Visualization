@@ -8,14 +8,12 @@ export class GPUMemoryManager {
   private device: GPUDevice | null = null;
   private bufferPool = new Map<string, GPUBuffer[]>();
   private sharedBuffers = new Map<string, SharedArrayBuffer>();
-  private initialized = false;
 
   /**
    * Initialize GPU memory manager
    */
   async initialize(device: GPUDevice): Promise<void> {
     this.device = device;
-    this.initialized = true;
     console.log('GPU Memory Manager initialized');
   }
 
@@ -108,7 +106,7 @@ export class GPUMemoryManager {
       // For SharedArrayBuffer, we can potentially use direct mapping
       // (This is a simplified implementation - actual zero-copy depends on WebGPU implementation)
       const view = new Uint8Array(data);
-      this.device.queue.writeBuffer(targetBuffer, offset, view);
+      this.device.queue.writeBuffer(targetBuffer, offset, view.buffer);
     } else {
       // Regular ArrayBuffer transfer
       this.device.queue.writeBuffer(targetBuffer, offset, data);
@@ -162,7 +160,7 @@ export class GPUMemoryManager {
       floatData[i * 3 + 2] = point.category.charCodeAt(0) || 0;
     });
 
-    this.device!.queue.writeBuffer(buffer, 0, floatData);
+    this.device!.queue.writeBuffer(buffer, 0, floatData.buffer);
     return buffer;
   }
 
@@ -176,7 +174,7 @@ export class GPUMemoryManager {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
-    this.device!.queue.writeBuffer(buffer, 0, array);
+    this.device!.queue.writeBuffer(buffer, 0, array.buffer);
     return buffer;
   }
 
@@ -216,7 +214,7 @@ export class GPUMemoryManager {
 
     // Upload to specific offset in buffer
     const offset = startIndex * 12; // 12 bytes per DataPoint
-    this.device.queue.writeBuffer(buffer, offset, floatData);
+    this.device.queue.writeBuffer(buffer, offset, floatData.buffer);
   }
 
   /**
@@ -228,7 +226,7 @@ export class GPUMemoryManager {
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
     });
 
-    this.device!.queue.writeBuffer(buffer, 0, vertexData);
+    this.device!.queue.writeBuffer(buffer, 0, vertexData.buffer);
     return buffer;
   }
 
@@ -241,7 +239,7 @@ export class GPUMemoryManager {
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
     });
 
-    this.device!.queue.writeBuffer(buffer, 0, indices);
+    this.device!.queue.writeBuffer(buffer, 0, indices.buffer);
     return buffer;
   }
 
@@ -296,7 +294,7 @@ export class GPUMemoryManager {
     let totalPooledSize = 0;
     let pooledBuffers = 0;
 
-    for (const [key, buffers] of this.bufferPool) {
+    for (const buffers of this.bufferPool.values()) {
       pooledBuffers += buffers.length;
       for (const buffer of buffers) {
         totalPooledSize += buffer.size;
@@ -314,7 +312,7 @@ export class GPUMemoryManager {
    * Clear all pooled buffers
    */
   clearPool(): void {
-    for (const [key, buffers] of this.bufferPool) {
+    for (const buffers of this.bufferPool.values()) {
       for (const buffer of buffers) {
         buffer.destroy();
       }
@@ -329,7 +327,6 @@ export class GPUMemoryManager {
     this.clearPool();
     this.sharedBuffers.clear();
     this.device = null;
-    this.initialized = false;
   }
 }
 

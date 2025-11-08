@@ -43,7 +43,8 @@ export class GPUMonitor {
   private webgpuIntegration: WebGPUIntegration | null = null;
   private metricsHistory: GPUMetrics[] = [];
   private readonly maxHistorySize = 100;
-  private monitoringInterval: NodeJS.Timeout | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private monitoringInterval: any = null;
   private listeners: Set<(report: GPUPerformanceReport) => void> = new Set();
 
   constructor(webgpuIntegration?: WebGPUIntegration) {
@@ -98,14 +99,14 @@ export class GPUMonitor {
         supported: performanceMetrics.gpuSupported,
         initialized: this.webgpuIntegration.isWebGPUSupported(),
         memoryUsage: performanceMetrics.memoryStats?.totalPooledSize || 0,
-        memoryLimit: performanceMetrics.memoryStats?.maxMemory || 0,
+        memoryLimit: 0, // Not available in current WebGPU integration
         bufferCount: performanceMetrics.memoryStats?.pooledBuffers || 0,
-        textureCount: performanceMetrics.memoryStats?.textureCount || 0,
-        shaderCount: performanceMetrics.memoryStats?.shaderCount || 0,
+        textureCount: 0, // Not available in current WebGPU integration
+        shaderCount: 0, // Not available in current WebGPU integration
         computeTime: performanceMetrics.computeMetrics?.computeTime || 0,
         renderTime: performanceMetrics.rendererMetrics?.gpuMemoryUsage || 0,
-        pipelineCount: performanceMetrics.memoryStats?.pipelineCount || 0,
-        commandEncoderCount: performanceMetrics.memoryStats?.commandEncoderCount || 0,
+        pipelineCount: 0, // Not available in current WebGPU integration
+        commandEncoderCount: 0, // Not available in current WebGPU integration
         adapterInfo: undefined,
         deviceLimits: undefined
       };
@@ -160,8 +161,8 @@ export class GPUMonitor {
     const memoryPercent = metrics.memoryLimit > 0 ? (metrics.memoryUsage / metrics.memoryLimit) * 100 : 0;
 
     // Calculate efficiency based on resource usage patterns
-    const computeEfficiency = this.calculateEfficiency('compute', metrics);
-    const renderEfficiency = this.calculateEfficiency('render', metrics);
+    const computeEfficiency = this.calculateEfficiency('compute');
+    const renderEfficiency = this.calculateEfficiency('render');
 
     return {
       memoryPercent,
@@ -170,7 +171,7 @@ export class GPUMonitor {
     };
   }
 
-  private calculateEfficiency(type: 'compute' | 'render', metrics: GPUMetrics): number {
+  private calculateEfficiency(type: 'compute' | 'render'): number {
     if (this.metricsHistory.length < 5) return 0;
 
     const recent = this.metricsHistory.slice(-5);
@@ -317,12 +318,27 @@ export class GPUMemoryPoolMonitor {
     }
   }
 
-  getPoolStats(poolName?: string): any {
+  getPoolStats(poolName?: string): {
+    allocated: number;
+    peak: number;
+    allocations: number;
+    deallocations: number;
+  } | Record<string, {
+    allocated: number;
+    peak: number;
+    allocations: number;
+    deallocations: number;
+  }> | null {
     if (poolName) {
       return this.pools.get(poolName) || null;
     }
 
-    const allPools: Record<string, any> = {};
+    const allPools: Record<string, {
+      allocated: number;
+      peak: number;
+      allocations: number;
+      deallocations: number;
+    }> = {};
     for (const [name, stats] of this.pools) {
       allPools[name] = { ...stats };
     }

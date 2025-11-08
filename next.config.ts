@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  webpack: (config, { dev, isServer }) => {
+  webpack: (config) => {
     // Performance optimizations
     config.optimization = {
       ...config.optimization,

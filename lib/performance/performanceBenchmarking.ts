@@ -48,11 +48,21 @@ export interface BenchmarkComparison {
 }
 
 export class PerformanceBenchmarkingSuite {
-  private webgpuIntegration?: WebGPUIntegration;
+  private webgpuIntegration: WebGPUIntegration | null = null;
   private results: BenchmarkResult[] = [];
 
-  constructor(webgpuIntegration?: WebGPUIntegration) {
-    this.webgpuIntegration = webgpuIntegration;
+  constructor(webgpuIntegration?: WebGPUIntegration | null) {
+    this.webgpuIntegration = webgpuIntegration || null;
+  }
+
+  private getMemoryUsage(): number {
+    try {
+      // Type-safe access to performance.memory
+      const perf = (performance as unknown as { memory?: { usedJSHeapSize?: number } });
+      return perf.memory?.usedJSHeapSize || 0;
+    } catch {
+      return 0;
+    }
   }
 
   async runBenchmark(
@@ -186,7 +196,7 @@ export class PerformanceBenchmarkingSuite {
   private collectMetrics(renderer: 'canvas' | 'webgpu'): ExtendedPerformanceMetrics {
     const baseMetrics: ExtendedPerformanceMetrics = {
       fps: 0, // Will be calculated from frame timing
-      memoryUsage: (performance as any).memory?.usedJSHeapSize / 1024 / 1024 || 0,
+      memoryUsage: this.getMemoryUsage() / 1024 / 1024 || 0,
       renderTime: 0, // Set by caller
       dataProcessingTime: 0,
       interactionLatency: 0,
@@ -298,11 +308,11 @@ export class PerformanceBenchmarkingSuite {
     }, null, 2);
   }
 
-  private generateSummary(): any {
+  private generateSummary(): BenchmarkSummary | null {
     if (this.results.length === 0) return null;
 
     const latest = this.results[this.results.length - 1];
-    const summary = {
+    const summary: BenchmarkSummary = {
       totalBenchmarks: this.results.length,
       latestBenchmark: {
         name: latest.config.name,
@@ -324,6 +334,17 @@ export class PerformanceBenchmarkingSuite {
 
     return summary;
   }
+}
+
+interface BenchmarkSummary {
+  totalBenchmarks: number;
+  latestBenchmark: {
+    name: string;
+    timestamp: string;
+    canvas: { averageFPS: number; stability: number } | null;
+    webgpu: { averageFPS: number; stability: number } | null;
+    comparison: { speedup: number; recommendation: 'WebGPU' | 'Canvas' } | null;
+  };
 }
 
 // Predefined benchmark configurations

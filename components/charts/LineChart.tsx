@@ -9,6 +9,7 @@ import { useDashboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useMemoryManagement } from '@/hooks/useMemoryManagement';
 import { ChartConfig, ZoomPanState } from '@/types/dashboard';
 import { useData } from '@/components/providers/DataProvider';
+import { WebGPUIntegration } from '@/lib/webgpu/webgpuIntegration';
 
 interface LineChartProps {
   config: ChartConfig;
@@ -18,6 +19,7 @@ interface LineChartProps {
   enableTooltips?: boolean;
   enableAccessibility?: boolean;
   enableKeyboardShortcuts?: boolean;
+  webgpuIntegration?: WebGPUIntegration;
 }
 
 export const LineChart: React.FC<LineChartProps> = ({
@@ -47,12 +49,14 @@ export const LineChart: React.FC<LineChartProps> = ({
     memory.updateMemoryAccess(); // Track memory access
   };
 
+  const defaultZoomPanState = { zoom: 1, panX: 0, panY: 0, isDragging: false };
+
   const chartContent = (
     <BaseChart
       width={width}
       height={height}
       config={config}
-      zoomPanState={enableZoomPan ? { zoom: 1, panX: 0, panY: 0, isDragging: false } : { zoom: 1, panX: 0, panY: 0, isDragging: false }}
+      zoomPanState={enableZoomPan ? defaultZoomPanState : defaultZoomPanState}
     />
   );
 
@@ -64,7 +68,7 @@ export const LineChart: React.FC<LineChartProps> = ({
           height={height}
           config={config}
           onHover={onHover}
-          zoomPanState={{ zoom: 1, panX: 0, panY: 0, isDragging: false }}
+          zoomPanState={defaultZoomPanState}
         />
       )}
     </IntelligentTooltip>

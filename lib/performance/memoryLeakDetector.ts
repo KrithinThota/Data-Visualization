@@ -23,12 +23,15 @@ export interface MemorySnapshot {
 
 export class MemoryLeakDetector {
   private snapshots: MemorySnapshot[] = [];
+  private reports: MemoryLeakReport[] = [];
   private readonly maxSnapshots = 300; // 5 minutes at 1 second intervals
+  private readonly maxReports = 1000; // Store up to 1000 reports
   private readonly leakThresholdMB = 10; // MB increase over time
   private readonly spikeThresholdMB = 50; // MB sudden increase
   private readonly growthRateThreshold = 1; // MB/minute
 
-  private leakDetectionInterval: NodeJS.Timeout | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private leakDetectionInterval: any = null;
   private listeners: Set<(report: MemoryLeakReport) => void> = new Set();
 
   startMonitoring(intervalMs: number = 1000): void {
@@ -49,14 +52,31 @@ export class MemoryLeakDetector {
     }
   }
 
+  private getMemoryUsage(): { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number } {
+    try {
+      // Type-safe access to performance.memory
+      const perf = (performance as unknown as { memory?: { usedJSHeapSize?: number; totalJSHeapSize?: number; jsHeapSizeLimit?: number } });
+      const memory = perf.memory || {};
+      return {
+        usedJSHeapSize: memory.usedJSHeapSize || 0,
+        totalJSHeapSize: memory.totalJSHeapSize || 0,
+        jsHeapSizeLimit: memory.jsHeapSizeLimit || 0
+      };
+    } catch {
+      return { usedJSHeapSize: 0, totalJSHeapSize: 0, jsHeapSizeLimit: 0 };
+    }
+  }
+
   takeSnapshot(metrics?: ExtendedPerformanceMetrics): void {
+    const memory = this.getMemoryUsage();
+    
     const snapshot: MemorySnapshot = {
       timestamp: Date.now(),
-      usedJSHeapSize: metrics?.memoryUsage || (performance as any).memory?.usedJSHeapSize || 0,
-      totalJSHeapSize: (performance as any).memory?.totalJSHeapSize || 0,
-      jsHeapSizeLimit: (performance as any).memory?.jsHeapSizeLimit || 0,
+      usedJSHeapSize: metrics?.memoryUsage || memory.usedJSHeapSize,
+      totalJSHeapSize: memory.totalJSHeapSize,
+      jsHeapSizeLimit: memory.jsHeapSizeLimit,
       gpuMemoryUsage: metrics?.gpuMemoryUsage || 0,
-      bufferCount: metrics ? (metrics as any).bufferCount || 0 : 0
+      bufferCount: this.extractBufferCount(metrics)
     };
 
     this.snapshots.push(snapshot);
@@ -65,6 +85,24 @@ export class MemoryLeakDetector {
     if (this.snapshots.length > this.maxSnapshots) {
       this.snapshots.shift();
     }
+  }
+
+  private extractBufferCount(metrics?: ExtendedPerformanceMetrics): number {
+    // Try to extract buffer count from metrics if available
+    if (!metrics) return 0;
+    
+    // Type-safe extraction without using 'any'
+    const metricKeys = Object.keys(metrics);
+    for (const key of metricKeys) {
+      if (key.toLowerCase().includes('buffer') || key.toLowerCase().includes('count')) {
+        // Use unknown as intermediate type for safe casting
+        const value = (metrics as unknown as Record<string, unknown>)[key];
+        if (typeof value === 'number' && value >= 0) {
+          return value;
+        }
+      }
+    }
+    return 0;
   }
 
   analyzeForLeaks(): MemoryLeakReport[] {
@@ -87,6 +125,8 @@ export class MemoryLeakDetector {
     // Notify listeners of new reports
     reports.forEach(report => {
       this.listeners.forEach(listener => listener(report));
+      // Also store the report for later retrieval
+      this.storeReport(report);
     });
 
     return reports;
@@ -244,26 +284,30 @@ export class MemoryLeakDetector {
 
     // Calculate growth rate over last minute
     const recent = this.snapshots.slice(-60);
+    let growthRate = 0;
     if (recent.length >= 2) {
       const first = recent[0].usedJSHeapSize;
       const last = recent[recent.length - 1].usedJSHeapSize;
       const timeDiff = (recent[recent.length - 1].timestamp - recent[0].timestamp) / (1000 * 60); // minutes
-      const growthRate = (last - first) / timeDiff;
+      growthRate = timeDiff > 0 ? (last - first) / timeDiff : 0;
     }
 
     return {
       currentUsage,
       averageUsage,
       peakUsage,
-      growthRate: 0, // Would calculate properly with more data
+      growthRate,
       snapshotsCount: this.snapshots.length
     };
   }
 
   getRecentReports(minutes: number = 5): MemoryLeakReport[] {
     const cutoff = Date.now() - (minutes * 60 * 1000);
-    // This would need to be stored separately as we don't keep all reports
-    return [];
+    
+    // Filter reports within the specified time window
+    const recentReports = this.reports.filter(report => report.timestamp >= cutoff);
+    
+    return recentReports;
   }
 
   addListener(callback: (report: MemoryLeakReport) => void): void {
@@ -276,6 +320,19 @@ export class MemoryLeakDetector {
 
   clearSnapshots(): void {
     this.snapshots = [];
+  }
+
+  private storeReport(report: MemoryLeakReport): void {
+    this.reports.push(report);
+    
+    // Keep only recent reports to prevent memory accumulation
+    if (this.reports.length > this.maxReports) {
+      this.reports = this.reports.slice(-this.maxReports);
+    }
+  }
+
+  clearReports(): void {
+    this.reports = [];
   }
 
   exportData(): { snapshots: MemorySnapshot[]; stats: ReturnType<MemoryLeakDetector['getMemoryStats']> } {

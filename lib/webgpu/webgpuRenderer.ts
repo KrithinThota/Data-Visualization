@@ -129,8 +129,7 @@ export class WebGPURenderer {
         targets: [{ format }]
       },
       primitive: {
-        topology: 'line-strip',
-        stripIndexFormat: undefined
+        topology: 'line-strip'
       }
     });
 
@@ -188,7 +187,7 @@ export class WebGPURenderer {
   /**
    * Process data using compute shader
    */
-  async processDataGPU(data: DataPoint[], config: ChartConfig): Promise<Float32Array> {
+  async processDataGPU(data: DataPoint[]): Promise<Float32Array> {
     if (!this.device || !this.computePipeline) {
       throw new Error('WebGPU not initialized');
     }
@@ -224,8 +223,8 @@ export class WebGPURenderer {
     const paramsArray = new Float32Array([minVal, maxVal, this.canvas.width, this.canvas.height]);
 
     // Upload data
-    this.device.queue.writeBuffer(dataBuffer, 0, dataArray);
-    this.device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
+    this.device.queue.writeBuffer(dataBuffer, 0, dataArray.buffer);
+    this.device.queue.writeBuffer(paramsBuffer, 0, paramsArray.buffer);
 
     // Create bind group
     const bindGroup = this.device.createBindGroup({
@@ -273,7 +272,7 @@ export class WebGPURenderer {
 
     try {
       // Process data on GPU
-      const processedData = await this.processDataGPU(data, config);
+      const processedData = await this.processDataGPU(data);
 
       // Create vertex buffer
       const vertexData = new Float32Array(data.length * 5); // x, y, r, g, b
@@ -295,11 +294,11 @@ export class WebGPURenderer {
         size: vertexData.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
       });
-      this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexData);
+      this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexData.buffer);
 
       // Create transformation matrix
       const transformMatrix = this.createOrthographicMatrix(0, this.canvas.width, this.canvas.height, 0, -1, 1);
-      this.device.queue.writeBuffer(this.uniformBuffer!, 0, transformMatrix);
+      this.device.queue.writeBuffer(this.uniformBuffer!, 0, transformMatrix.buffer);
 
       // Create bind group
       this.bindGroup = this.device.createBindGroup({

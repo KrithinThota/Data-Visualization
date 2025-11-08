@@ -36,7 +36,7 @@ export interface PerformanceAnalysis {
   };
   trends: {
     fps: 'improving' | 'degrading' | 'stable';
-    memory: 'increasing' | 'decreasing' | 'stable';
+    memory: 'improving' | 'degrading' | 'stable';
     stability: 'improving' | 'degrading' | 'stable';
   };
   insights: string[];
@@ -64,11 +64,16 @@ export class PerformanceHistoryTracker {
     metrics: ExtendedPerformanceMetrics,
     context?: PerformanceHistoryEntry['context']
   ): void {
-    this.addEntry({
+    const entry: PerformanceHistoryEntry = {
       timestamp: Date.now(),
       metrics,
-      context
-    });
+    };
+
+    if (context) {
+      entry.context = context;
+    }
+
+    this.addEntry(entry);
   }
 
   addAlert(alert: PerformanceAlert): void {
@@ -365,7 +370,7 @@ export class PerformanceHistoryTracker {
       recommendations.push('Consider implementing frame rate limiting or stabilization techniques');
     }
 
-    if (trends.memory === 'increasing') {
+    if (trends.memory === 'degrading') {
       recommendations.push('Monitor memory usage trends and implement cleanup strategies');
       recommendations.push('Check for potential memory leaks in data processing');
     }

@@ -1,5 +1,4 @@
 import { SharedBufferManager, SharedRingBuffer } from './sharedBuffer';
-import { float32ArrayPool, uint8ArrayPool } from './objectPool';
 import { enhancedLeakDetector } from './enhancedLeakDetector';
 
 /**
@@ -285,6 +284,8 @@ export class SharedArrayBufferIntegration {
 
     // Clear all buffers
     this.dataBuffers.forEach((buffer, id) => {
+      // buffer is intentionally not used here as we only need the id
+      void buffer; // Explicitly mark as intentionally unused
       SharedBufferManager.deleteBuffer(id);
     });
     this.dataBuffers.clear();

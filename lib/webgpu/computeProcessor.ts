@@ -6,7 +6,6 @@ import { DataPoint } from '@/types/dashboard';
  */
 export class ComputeProcessor {
   private device: GPUDevice | null = null;
-  private computePipeline: GPUComputePipeline | null = null;
   private bindGroupLayout: GPUBindGroupLayout | null = null;
   private initialized = false;
 
@@ -134,13 +133,14 @@ export class ComputeProcessor {
       }
     `;
 
-    return this.runComputeShader(
+    const result = await this.runComputeShader(
       shaderCode,
       'aggregateData',
       data,
       bucketSize,
       this.calculateBucketCount(data, bucketSize)
     );
+    return result as AggregatedBucket[];
   }
 
   /**
@@ -190,8 +190,8 @@ export class ComputeProcessor {
       data.length // Allocate max possible size
     );
 
-    // Remove empty entries
-    return filteredData.filter(point => point.timestamp !== 0);
+    // Remove empty entries and ensure proper typing
+    return (filteredData as DataPoint[]).filter(point => point.timestamp !== 0);
   }
 
   /**
@@ -240,13 +240,14 @@ export class ComputeProcessor {
       }
     `;
 
-    return this.runComputeShader(
+    const result = await this.runComputeShader(
       shaderCode,
       'movingAverage',
       data,
       [windowSize, data.length],
       data.length
     );
+    return result as DataPoint[];
   }
 
   /**
@@ -258,10 +259,14 @@ export class ComputeProcessor {
     inputData: DataPoint[],
     params: number[] | number,
     outputSize: number
-  ): Promise<any[]> {
+  ): Promise<(DataPoint | AggregatedBucket)[]> {
     if (!this.device || !this.bindGroupLayout) {
       throw new Error('Device not initialized');
     }
+
+    // Determine element size based on entry point
+    const floatsPerElement = entryPoint === 'aggregateData' ? 5 : 3;
+    const elementSize = floatsPerElement * 4; // 4 bytes per float
 
     // Create shader module
     const shaderModule = this.device.createShaderModule({
@@ -296,7 +301,7 @@ export class ComputeProcessor {
     });
 
     const outputBuffer = this.device.createBuffer({
-      size: outputSize * 12, // 3 floats per DataPoint
+      size: outputSize * elementSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
     });
 
@@ -306,9 +311,13 @@ export class ComputeProcessor {
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    // Initialize output buffer to zeros
+    const zeroArray = new Float32Array(outputSize * floatsPerElement);
+    this.device.queue.writeBuffer(outputBuffer, 0, zeroArray.buffer);
+
     // Upload data
-    this.device.queue.writeBuffer(inputBuffer, 0, inputArray);
-    this.device.queue.writeBuffer(paramsBuffer, 0, paramsArray);
+    this.device.queue.writeBuffer(inputBuffer, 0, inputArray.buffer);
+    this.device.queue.writeBuffer(paramsBuffer, 0, paramsArray.buffer);
 
     // Create bind group
     const bindGroup = this.device.createBindGroup({
@@ -330,33 +339,33 @@ export class ComputeProcessor {
 
     // Read results
     const readBuffer = this.device.createBuffer({
-      size: outputSize * 12,
+      size: outputSize * elementSize,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
     });
-    commandEncoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, outputSize * 12);
+    commandEncoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, outputSize * elementSize);
     this.device.queue.submit([commandEncoder.finish()]);
 
     await readBuffer.mapAsync(GPUMapMode.READ);
     const resultArray = new Float32Array(readBuffer.getMappedRange());
     readBuffer.unmap();
 
-    // Convert back to DataPoint objects
-    const results: any[] = [];
-    for (let i = 0; i < resultArray.length; i += 3) {
+    // Convert back to objects
+    const results: (DataPoint | AggregatedBucket)[] = [];
+    for (let i = 0; i < resultArray.length; i += floatsPerElement) {
       if (entryPoint === 'aggregateData') {
         results.push({
           timestamp: resultArray[i],
           min: resultArray[i + 1],
           max: resultArray[i + 2],
-          avg: resultArray[i + 3] || 0,
-          count: resultArray[i + 4] || 0
-        });
+          avg: resultArray[i + 3],
+          count: resultArray[i + 4]
+        } as AggregatedBucket);
       } else {
         results.push({
           timestamp: resultArray[i],
           value: resultArray[i + 1],
           category: String.fromCharCode(resultArray[i + 2] || 65)
-        });
+        } as DataPoint);
       }
     }
 
@@ -398,11 +407,14 @@ export class ComputeProcessor {
   destroy(): void {
     if (this.device) {
       this.device.destroy();
+      this.device = null;
     }
+    this.bindGroupLayout = null;
+    this.initialized = false;
   }
 }
 
-interface AggregatedBucket {
+export interface AggregatedBucket {
   timestamp: number;
   min: number;
   max: number;

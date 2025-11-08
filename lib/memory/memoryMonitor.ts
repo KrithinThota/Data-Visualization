@@ -1,4 +1,3 @@
-import { MemoryLeakReport } from '../performance/memoryLeakDetector';
 import { enhancedLeakDetector } from './enhancedLeakDetector';
 import { cleanupManager } from './cleanupManager';
 
@@ -226,6 +225,7 @@ export class MemoryMonitor {
 
   private checkAutoResolve(): void {
     // Auto-resolve alerts when conditions improve
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const memoryUsage = (performance as any).memory?.usedJSHeapSize || 0;
 
     if (memoryUsage < this.thresholds.memoryUsage * 0.7) {

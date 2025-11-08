@@ -10,10 +10,22 @@ export class DataGenerator {
   constructor(private updateInterval = 100) {} // 100ms updates
 
   startStreaming(callback: (data: DataPoint[]) => void): void {
+    console.log('🚀 DataGenerator: Starting streaming with callback');
     this.listeners.add(callback);
     if (!this.isRunning) {
       this.isRunning = true;
       this.startGeneration();
+    }
+
+    // Generate initial batch immediately if no data
+    if (this.dataBuffer.length === 0) {
+      const initialBatch = this.generateBatch();
+      this.dataBuffer.push(...initialBatch);
+      console.log('📊 DataGenerator: Generated initial batch of', initialBatch.length, 'points');
+      this.listeners.forEach(listener => {
+        console.log('📡 DataGenerator: Notifying listener with initial batch');
+        listener(initialBatch);
+      });
     }
   }
 
@@ -28,10 +40,12 @@ export class DataGenerator {
   }
 
   private startGeneration(): void {
+    console.log('🔄 DataGenerator: Starting generation loop with', this.updateInterval, 'ms interval');
     this.intervalId = setInterval(() => {
       if (!this.isRunning) return;
 
       const newData = this.generateBatch();
+      console.log('📈 DataGenerator: Generated real-time batch of', newData.length, 'points');
       this.dataBuffer.push(...newData);
 
       // Keep buffer at reasonable size
@@ -40,6 +54,7 @@ export class DataGenerator {
       }
 
       // Notify all listeners
+      console.log('📡 DataGenerator: Broadcasting to', this.listeners.size, 'listeners');
       this.listeners.forEach(listener => listener(newData));
     }, this.updateInterval);
   }
@@ -83,6 +98,11 @@ export class DataGenerator {
   // Get current buffer for historical data access
   getBufferedData(): DataPoint[] {
     return [...this.dataBuffer];
+  }
+
+  // Public method to generate a batch (for initial data loading)
+  generateInitialBatch(): DataPoint[] {
+    return this.generateBatch();
   }
 
   // Get data within time range

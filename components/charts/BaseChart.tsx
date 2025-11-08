@@ -9,6 +9,8 @@ import { useData } from '@/components/providers/DataProvider';
 import { useChartMemoryManagement } from '@/hooks/useMemoryManagement';
 import { enhancedLeakDetector } from '@/lib/memory/enhancedLeakDetector';
 import { registerComponentCleanup } from '@/lib/memory/cleanupManager';
+import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
+import { WebGPUIntegration } from '@/lib/webgpu/webgpuIntegration';
 
 interface BaseChartProps {
   width: number;
@@ -16,6 +18,7 @@ interface BaseChartProps {
   config: ChartConfig;
   onHover?: (point: DataPoint | null, event: MouseEvent) => void;
   zoomPanState?: ZoomPanState;
+  webgpuIntegration?: WebGPUIntegration;
 }
 
 export const BaseChart: React.FC<BaseChartProps> = React.memo(({
@@ -44,11 +47,18 @@ export const BaseChart: React.FC<BaseChartProps> = React.memo(({
     height
   );
 
+  // Performance monitoring
+  const { incrementFrameCount } = usePerformanceMonitor();
+
   const processedData = useMemo(() => {
-    if (!data.length) return [];
+    if (!data.length) {
+      console.log('📈 BaseChart: No data available for chart', config.id);
+      return [];
+    }
 
     // Filter data based on chart config
     const filtered = data.filter(() => config.visible);
+    console.log('📈 BaseChart:', config.id, '- Processing', filtered.length, 'visible data points');
 
     // Apply time range filtering if needed
     // Apply category filtering if needed
@@ -77,7 +87,7 @@ export const BaseChart: React.FC<BaseChartProps> = React.memo(({
         if (pooledContextRef.current) {
           memory.releaseCanvasContext(pooledContextRef.current);
         }
-        
+
         // Clear any cached data
         if (hybridRendererRef.current) {
           hybridRendererRef.current.destroy();
@@ -103,7 +113,6 @@ export const BaseChart: React.FC<BaseChartProps> = React.memo(({
         // Fallback Canvas renderer using pooled context
         rendererRef.current = new CanvasRenderer(canvas);
 
-
         // Initialize last frame time
         lastFrameTimeRef.current = performance.now();
 
@@ -114,6 +123,9 @@ export const BaseChart: React.FC<BaseChartProps> = React.memo(({
 
             const now = performance.now();
             lastFrameTimeRef.current = now;
+
+            // Increment frame count for FPS monitoring
+            incrementFrameCount();
 
             // Update LOD based on zoom level
             if (zoomPanState) {
@@ -161,6 +173,9 @@ export const BaseChart: React.FC<BaseChartProps> = React.memo(({
           const now = performance.now();
           lastFrameTimeRef.current = now;
 
+          // Increment frame count for FPS monitoring
+          incrementFrameCount();
+
           // Update LOD based on zoom level
           if (zoomPanState) {
             lodRendererRef.current.setZoomLevel(zoomPanState.zoom);
@@ -190,7 +205,7 @@ export const BaseChart: React.FC<BaseChartProps> = React.memo(({
       // Cleanup registered tasks
       unregisterCleanup();
     };
-  }, [processedData, config, width, height, zoomPanState, memory]);
+  }, [processedData, config, width, height, zoomPanState, memory, incrementFrameCount]);
 
   const handleMouseMove = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!onHover || !canvasRef.current) return;
@@ -202,9 +217,9 @@ export const BaseChart: React.FC<BaseChartProps> = React.memo(({
 
     // Use memory-efficient data processing for hover detection
     const processedHoverData = processedData; // Use already processed data
-    
+
     const nearestPoint = findNearestPoint(x, y, processedHoverData, width, height);
-    
+
     // Measure interaction latency
     const latency = performance.now() - startTime;
     // Report latency for performance monitoring

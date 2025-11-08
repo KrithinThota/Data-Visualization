@@ -5,6 +5,12 @@ import { GPUPerformanceReport } from './gpuMonitor';
 import { PerformanceAnalysis } from './performanceHistory';
 import { BenchmarkResult } from './performanceBenchmarking';
 
+interface NavigatorExtended extends Navigator {
+  deviceMemory?: number;
+}
+
+declare const navigator: NavigatorExtended;
+
 export interface PerformanceReport {
   metadata: {
     generatedAt: string;
@@ -18,7 +24,7 @@ export interface PerformanceReport {
       platform: string;
       webgpuSupported: boolean;
       hardwareConcurrency: number;
-      deviceMemory?: number;
+      deviceMemory: number | undefined;
     };
   };
   summary: {
@@ -36,7 +42,7 @@ export interface PerformanceReport {
   };
   analysis: PerformanceAnalysis;
   alerts: PerformanceAlert[];
-  benchmarks?: BenchmarkResult[];
+  benchmarks: BenchmarkResult[];
   recommendations: {
     immediate: string[];
     shortTerm: string[];
@@ -77,8 +83,8 @@ export class PerformanceReportGenerator {
   }
 
   generateReport(analysis: PerformanceAnalysis): PerformanceReport {
-    const startTime = Math.min(...this.metrics.map(m => Date.now() - 1000)); // Estimate
-    const endTime = Math.max(...this.metrics.map(m => Date.now()));
+    const startTime = analysis.period.start;
+    const endTime = analysis.period.end;
 
     const summary = this.generateSummary(analysis);
     const recommendations = this.generateRecommendations(analysis, summary);
@@ -96,13 +102,13 @@ export class PerformanceReportGenerator {
           platform: navigator.platform,
           webgpuSupported: 'gpu' in navigator,
           hardwareConcurrency: navigator.hardwareConcurrency || 1,
-          deviceMemory: (navigator as any).deviceMemory
+          deviceMemory: navigator.deviceMemory
         }
       },
       summary,
       analysis,
       alerts: this.alerts,
-      benchmarks: this.benchmarks.length > 0 ? this.benchmarks : undefined,
+      benchmarks: this.benchmarks,
       recommendations,
       rawData: {
         metrics: this.metrics,

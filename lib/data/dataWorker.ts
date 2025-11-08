@@ -15,21 +15,19 @@ interface WorkerMessage {
   };
 }
 
-interface WorkerResponse {
-  type: 'DATA_PROCESSED' | 'DATA_AGGREGATED' | 'DATA_FILTERED' | 'STATS_COMPUTED' | 'ERROR';
-  data?: ProcessedData | {
+interface ExtendedProcessedData extends ProcessedData {
+  processingTime: number;
+  aggregated?: {
     min: number;
     max: number;
     avg: number;
     count: number;
-  } | DataPoint[] | {
-    mean: number;
-    median: number;
-    stdDev: number;
-    min: number;
-    max: number;
-    quartiles: [number, number, number];
   };
+}
+
+interface WorkerResponse {
+  type: 'DATA_PROCESSED' | 'DATA_AGGREGATED' | 'DATA_FILTERED' | 'STATS_COMPUTED' | 'ERROR';
+  data?: ExtendedProcessedData | DataPoint[] | Record<string, unknown>;
   error?: string;
 }
 
@@ -53,8 +51,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const aggregated = await SIMDProcessor.aggregateData(data, config.bucketSize);
         self.postMessage({
           type: 'DATA_AGGREGATED',
-          data: aggregated
-        } as WorkerResponse);
+          data: (aggregated as unknown) as Record<string, unknown>
+        });
         break;
 
       case 'FILTER':
@@ -62,8 +60,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const filtered = await SIMDProcessor.filterLargeDataset(data, config.threshold);
         self.postMessage({
           type: 'DATA_FILTERED',
-          data: filtered
-        } as WorkerResponse);
+          data: filtered as DataPoint[]
+        });
         break;
 
       case 'STATS':
@@ -71,8 +69,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const stats = await SIMDProcessor.computeStatistics(data);
         self.postMessage({
           type: 'STATS_COMPUTED',
-          data: stats
-        } as WorkerResponse);
+          data: stats as Record<string, unknown>
+        });
         break;
 
       case 'STOP':
@@ -91,12 +89,12 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   }
 };
 
-async function processDataWithWASM(data: DataPoint[]): Promise<ProcessedData> {
+async function processDataWithWASM(data: DataPoint[]): Promise<ExtendedProcessedData> {
   const startTime = performance.now();
 
   // Use SIMD for filtering and aggregation
   const [filteredData, aggregatedData, stats] = await Promise.all([
-    SIMDProcessor.filterLargeDataset(data, 0), // Filter out negative values
+    SIMDProcessor.filterLargeDataset(data, 0), // Filter out non-positive values (≤ 0)
     SIMDProcessor.aggregateData(data, 60000), // 1-minute buckets
     SIMDProcessor.computeStatistics(data)
   ]);
@@ -112,11 +110,17 @@ async function processDataWithWASM(data: DataPoint[]): Promise<ProcessedData> {
       count: data.length
     },
     filtered: filteredData,
-    // Add metadata to include processing time
-    metadata: {
-      processingTime
-    }
+    processingTime,
+    aggregated: aggregatedData
   };
+}
+
+interface PerformanceMemory {
+  usedJSHeapSize?: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+  memory?: PerformanceMemory;
 }
 
 // Enhanced performance monitoring with error handling
@@ -124,7 +128,8 @@ let lastMemoryUsage = 0;
 const memoryInterval = setInterval(() => {
   try {
     if ('memory' in performance) {
-      const memoryUsage = (performance as any).memory?.usedJSHeapSize;
+      const perfWithMemory = performance as PerformanceWithMemory;
+      const memoryUsage = perfWithMemory.memory?.usedJSHeapSize;
       if (memoryUsage !== undefined && Math.abs(memoryUsage - lastMemoryUsage) > 1024 * 1024) { // 1MB change
         console.log(`Worker memory usage: ${(memoryUsage / 1024 / 1024).toFixed(2)} MB`);
         lastMemoryUsage = memoryUsage;

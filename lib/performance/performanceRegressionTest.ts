@@ -97,7 +97,7 @@ export class PerformanceRegressionTest {
 
   private analyzeResults(
     samples: ExtendedPerformanceMetrics[],
-    benchmarkResults?: BenchmarkResult[]
+    benchmarkResults: BenchmarkResult[] = []
   ): RegressionTestResult {
     const violations: RegressionViolation[] = [];
 

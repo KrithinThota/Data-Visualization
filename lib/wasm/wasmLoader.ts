@@ -1,4 +1,4 @@
-import { AggregatedPoint, DataPoint } from '@/types/dashboard';
+import { DataPoint } from '@/types/dashboard';
 
 export interface AggregatedData {
   min: number;
@@ -50,7 +50,7 @@ export class WasmLoader {
 
       // Initialize SIMD support
       if (this.isSIMDSupported) {
-        const initSIMD = instance.exports.initSIMD as Function;
+        const initSIMD = instance.exports.initSIMD as CallableFunction;
         initSIMD(1); // Enable SIMD
         console.log('WebAssembly SIMD enabled');
       }
@@ -64,7 +64,7 @@ export class WasmLoader {
 
   static async aggregateData(data: DataPoint[], bucketSize: number): Promise<AggregatedData> {
     const instance = await this.load();
-    const aggregateData = instance.exports.aggregateData as Function;
+    const aggregateData = instance.exports.aggregateData as (inputPtr: number, length: number, outputPtr: number, bucketSize: number) => void;
 
     if (!this.memory) throw new Error('Memory not initialized');
 
@@ -110,7 +110,7 @@ export class WasmLoader {
 
   static async filterData(data: DataPoint[], threshold: number): Promise<DataPoint[]> {
     const instance = await this.load();
-    const filterDataSIMD = instance.exports.filterDataSIMD as Function;
+    const filterDataSIMD = instance.exports.filterDataSIMD as (inputPtr: number, length: number, threshold: number, outputPtr: number) => number;
 
     if (!this.memory) throw new Error('Memory not initialized');
 
@@ -172,13 +172,13 @@ export class WasmLoader {
   // Memory management helpers
   static async allocate(size: number): Promise<number> {
     const instance = await this.load();
-    const malloc = instance.exports.malloc as Function;
+    const malloc = instance.exports.malloc as (size: number) => number;
     return malloc(size);
   }
 
   static async deallocate(ptr: number): Promise<void> {
     const instance = await this.load();
-    const free = instance.exports.free as Function;
+    const free = instance.exports.free as (ptr: number) => void;
     free(ptr);
   }
 
