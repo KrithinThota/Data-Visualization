@@ -38,7 +38,7 @@ const DashboardComponent = () => {
     enableAggregation: false
   });
 
-  const { data, isConnected, error, lastUpdate, totalPoints, connect, disconnect } = useDataStream(streamOptions);
+  const { data, isConnected, error, lastUpdate, totalPoints, connect, disconnect, updateOptions } = useDataStream(streamOptions);
 
   // Auto-connect data stream on mount
   useEffect(() => {
@@ -52,6 +52,11 @@ const DashboardComponent = () => {
       disconnect();
     };
   }, [connect, disconnect]);
+
+  // Update stream options when they change
+  useEffect(() => {
+    updateOptions(streamOptions);
+  }, [streamOptions, updateOptions]);
   
   // Web Worker for data processing
   const {
@@ -294,6 +299,8 @@ const DashboardComponent = () => {
     startTransition(() => {
       if (isConnected) {
         disconnect();
+        // Reset processing state when disconnecting
+        setIsDataProcessing(false);
       } else {
         connect();
       }

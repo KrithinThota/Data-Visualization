@@ -123,12 +123,13 @@ export function useDataStream(
       eventSourceRef.current = null;
     }
     setIsConnected(false);
+    setError(null); // Clear any connection errors
   }, []);
   
   const updateOptions = useCallback((newOptions: Partial<RealtimeDataStreamOptions>) => {
     optionsRef.current = { ...optionsRef.current, ...newOptions };
-    
-    // Reconnect if currently connected
+
+    // Reconnect if currently connected to apply new options
     if (isConnected) {
       disconnect();
       setTimeout(connect, 100);
