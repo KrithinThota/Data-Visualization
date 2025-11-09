@@ -1,0 +1,45 @@
+{
+  "line": {
+    "color": "#3b82f6",
+    "lineWidth": 2,
+    "smooth": true,
+    "showGrid": true,
+    "showAxes": true,
+    "animated": false
+  },
+  "bar": {
+    "color": "#10b981",
+    "barWidth": 0.8,
+    "showGrid": true,
+    "showAxes": true,
+    "animated": false
+  },
+  "scatter": {
+    "color": "#f59e0b",
+    "pointSize": 4,
+    "opacity": 0.8,
+    "showGrid": true,
+    "showAxes": true,
+    "animated": false
+  },
+  "heatmap": {
+    "cellSize": 10,
+    "colorScale": "blue-red",
+    "animated": false
+  },
+  "performance": {
+    "targetFPS": 60,
+    "maxDataPoints": 10000,
+    "enableWebWorkers": true,
+    "enableOffscreenCanvas": true,
+    "batchUpdateInterval": 100,
+    "enableRAFThrottling": true,
+    "enableDirtyRegions": true,
+    "enableContextPooling": true
+  },
+  "viewport": {
+    "defaultWidth": 800,
+    "defaultHeight": 400,
+    "responsive": true
+  }
+}
