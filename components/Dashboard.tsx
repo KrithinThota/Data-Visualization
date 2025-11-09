@@ -9,10 +9,11 @@ import { useData } from './providers/DataProvider';
 import { WebGPUIntegration } from '@/lib/webgpu/webgpuIntegration';
 
 export const Dashboard: React.FC = () => {
-  const [viewMode, setViewMode] = useState<'charts' | 'table' | 'split'>('charts');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [webgpuIntegration] = useState(() => new WebGPUIntegration());
-  const { performance, data, isLoading } = useData();
+   const [viewMode, setViewMode] = useState<'charts' | 'table' | 'split' | 'single'>('charts');
+   const [selectedChartId, setSelectedChartId] = useState<string | null>(null);
+   const [isFullscreen, setIsFullscreen] = useState(false);
+   const [webgpuIntegration] = useState(() => new WebGPUIntegration());
+   const { performance, data, isLoading, chartConfigs } = useData();
 
   console.log('🎯 Dashboard Render:', {
     dataPoints: data.length,
@@ -67,7 +68,10 @@ export const Dashboard: React.FC = () => {
               {/* View Mode Toggle */}
               <div className="hidden sm:flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
                 <button
-                  onClick={() => setViewMode('charts')}
+                  onClick={() => {
+                    setViewMode('charts');
+                    setSelectedChartId(null);
+                  }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     viewMode === 'charts'
                       ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
@@ -77,7 +81,23 @@ export const Dashboard: React.FC = () => {
                   Charts
                 </button>
                 <button
-                  onClick={() => setViewMode('table')}
+                  onClick={() => {
+                    setViewMode('single');
+                    setSelectedChartId(chartConfigs[0]?.id || null);
+                  }}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    viewMode === 'single'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  Single
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode('table');
+                    setSelectedChartId(null);
+                  }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     viewMode === 'table'
                       ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
@@ -87,7 +107,10 @@ export const Dashboard: React.FC = () => {
                   Table
                 </button>
                 <button
-                  onClick={() => setViewMode('split')}
+                  onClick={() => {
+                    setViewMode('split');
+                    setSelectedChartId(null);
+                  }}
                   className={`px-3 py-1 text-sm rounded-md transition-colors ${
                     viewMode === 'split'
                       ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
@@ -102,10 +125,19 @@ export const Dashboard: React.FC = () => {
               <div className="sm:hidden">
                 <select
                   value={viewMode}
-                  onChange={(e) => setViewMode(e.target.value as 'charts' | 'table' | 'split')}
+                  onChange={(e) => {
+                    const newMode = e.target.value as 'charts' | 'table' | 'split' | 'single';
+                    setViewMode(newMode);
+                    if (newMode === 'single') {
+                      setSelectedChartId(chartConfigs[0]?.id || null);
+                    } else {
+                      setSelectedChartId(null);
+                    }
+                  }}
                   className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 rounded-md border-0 text-gray-900 dark:text-white"
                 >
                   <option value="charts">Charts</option>
+                  <option value="single">Single</option>
                   <option value="table">Table</option>
                   <option value="split">Split</option>
                 </select>
@@ -153,6 +185,61 @@ export const Dashboard: React.FC = () => {
                 </div>
               ) : (
                 <ChartGrid width={800} height={400} />
+              )}
+            </div>
+          )}
+
+          {/* Single Chart View */}
+          {viewMode === 'single' && selectedChartId && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Chart View
+                </h3>
+                {/* Chart Navigation */}
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => {
+                      const currentIndex = chartConfigs.findIndex(c => c.id === selectedChartId);
+                      const prevIndex = currentIndex > 0 ? currentIndex - 1 : chartConfigs.length - 1;
+                      setSelectedChartId(chartConfigs[prevIndex]?.id || null);
+                    }}
+                    className="p-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                    title="Previous Chart"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    {chartConfigs.findIndex(c => c.id === selectedChartId) + 1} of {chartConfigs.length}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const currentIndex = chartConfigs.findIndex(c => c.id === selectedChartId);
+                      const nextIndex = currentIndex < chartConfigs.length - 1 ? currentIndex + 1 : 0;
+                      setSelectedChartId(chartConfigs[nextIndex]?.id || null);
+                    }}
+                    className="p-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                    title="Next Chart"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-96">
+                  <div className="text-gray-500 dark:text-gray-400">Loading chart...</div>
+                </div>
+              ) : (
+                <ChartGrid
+                  width={1200}
+                  height={600}
+                  selectedChartId={selectedChartId}
+                  singleMode={true}
+                />
               )}
             </div>
           )}

@@ -28,7 +28,7 @@ export class WebGPUIntegration {
   async initialize(canvas: HTMLCanvasElement): Promise<boolean> {
     try {
       // Check WebGPU support
-      this.webgpuSupported = WebGPURenderer.isSupported() && ComputeProcessor.isSupported();
+      this.webgpuSupported = !!navigator.gpu;
 
       if (!this.webgpuSupported) {
         console.log('WebGPU not supported, using Canvas 2D fallback');
@@ -36,11 +36,11 @@ export class WebGPUIntegration {
       }
 
       // Initialize WebGPU renderer
-      this.renderer = new WebGPURenderer(canvas);
-      const rendererInitialized = await this.renderer.initialize();
-
-      if (!rendererInitialized) {
-        console.warn('WebGPU renderer initialization failed, falling back to Canvas 2D');
+      this.renderer = new WebGPURenderer();
+      try {
+        await this.renderer.initialize(canvas);
+      } catch (error) {
+        console.warn('WebGPU renderer initialization failed, falling back to Canvas 2D:', error);
         return false;
       }
 
@@ -78,7 +78,7 @@ export class WebGPUIntegration {
       throw new Error('WebGPU integration not initialized');
     }
 
-    await this.renderer.renderLineChart(data, config);
+    this.renderer.render(data, config, 800, 400); // Default dimensions
   }
 
   /**
@@ -163,7 +163,7 @@ export class WebGPUIntegration {
   } {
     return {
       gpuSupported: this.webgpuSupported,
-      rendererMetrics: this.renderer?.getPerformanceMetrics() || null,
+      rendererMetrics: null, // TODO: Implement performance metrics
       computeMetrics: this.computeProcessor?.getPerformanceMetrics() || null,
       memoryStats: this.memoryManager?.getMemoryStats() || null
     };

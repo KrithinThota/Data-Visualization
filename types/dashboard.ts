@@ -38,13 +38,15 @@ export interface TimeRange {
 }
 
 export interface DashboardState {
-  data: DataPoint[];
-  filters: FilterConfig;
-  timeRange: TimeRange;
-  chartConfigs: ChartConfig[];
-  performance: PerformanceMetrics;
-  isLoading: boolean;
-}
+   data: DataPoint[];
+   filters: FilterConfig;
+   timeRange: TimeRange;
+   chartConfigs: ChartConfig[];
+   performance: PerformanceMetrics;
+   isLoading: boolean;
+   windowSize?: number;
+   categoryColors?: Record<string, string>;
+ }
 
 export interface AggregatedPoint {
   timestamp: number;

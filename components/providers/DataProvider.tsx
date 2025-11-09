@@ -12,11 +12,13 @@ import { dataCache } from '@/lib/memory/weakCache';
 const DataContext = createContext<DashboardState | null>(null);
 
 interface DataProviderActions {
-  updateFilters: (filters: Partial<FilterConfig>) => void;
-  updateTimeRange: (timeRange: TimeRange) => void;
-  clearData: () => void;
-  getProcessedData: () => Promise<DataPoint[]>;
-}
+   updateFilters: (filters: Partial<FilterConfig>) => void;
+   updateTimeRange: (timeRange: TimeRange) => void;
+   updateWindowSize: (size: number) => void;
+   clearData: () => void;
+   getProcessedData: () => Promise<DataPoint[]>;
+   getCategoryColor: (category: string) => string;
+ }
 
 const DataActionsContext = createContext<DataProviderActions | null>(null);
 
@@ -24,34 +26,41 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<DashboardState>(() => ({
     data: [],
     filters: {},
-    timeRange: { start: Date.now() - 3600000, end: Date.now() }, // Last hour
+    timeRange: { start: Date.now() - 3600000, end: Date.now() + 3600000 }, // Last hour to next hour for real-time data
+    windowSize: 2000, // Sliding window size
+    categoryColors: {
+      'A': '#1F77B4', // Blue
+      'B': '#FF7F0E', // Orange
+      'C': '#2CA02C', // Green
+      'D': '#D62728'  // Red
+    },
     chartConfigs: [
       {
         id: 'line-chart-1',
         type: 'line',
         dataKey: 'value',
-        color: '#3B82F6',
+        color: '#1F77B4', // Colorblind-friendly blue
         visible: true
       },
       {
         id: 'bar-chart-1',
         type: 'bar',
         dataKey: 'value',
-        color: '#10B981',
+        color: '#FF7F0E', // Colorblind-friendly orange
         visible: true
       },
       {
         id: 'scatter-chart-1',
         type: 'scatter',
         dataKey: 'value',
-        color: '#F59E0B',
+        color: '#2CA02C', // Colorblind-friendly green
         visible: true
       },
       {
         id: 'heatmap-chart-1',
         type: 'heatmap',
         dataKey: 'value',
-        color: '#EF4444',
+        color: '#D62728', // Colorblind-friendly red
         visible: true
       }
     ],
@@ -144,20 +153,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dataCache.set(cacheKey, processedData);
       }
 
-      // Update state with processed data
-      setState(prev => {
-        const newDataArray = [...prev.data.slice(-990), ...processedData];
-        console.log('✅ DataProvider: Updated state with', newDataArray.length, 'total data points');
-        return {
-          ...prev,
-          data: newDataArray,
-          isLoading: false,
-          performance: {
-            ...prev.performance,
-            dataProcessingTime: performance.now() - startTime
-          }
-        };
-      });
+      // Update state with processed data using sliding window
+       setState(prev => {
+         const windowSize = prev.windowSize || 2000;
+         const newDataArray = [...prev.data.slice(-(windowSize - processedData.length)), ...processedData];
+         console.log('✅ DataProvider: Updated state with', newDataArray.length, 'total data points (window size:', windowSize, ')');
+         return {
+           ...prev,
+           data: newDataArray,
+           isLoading: false,
+           performance: {
+             ...prev.performance,
+             dataProcessingTime: performance.now() - startTime
+           }
+         };
+       });
 
       // Update memory monitoring
       enhancedLeakDetector.updateAccess(cacheKey);
@@ -190,21 +200,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [processIncomingData]);
 
-  // Force initial data load if no data is present
+  // Update time range to maintain sliding window for real-time data
   useEffect(() => {
-    if (state.data.length === 0 && !state.isLoading && dataGeneratorRef.current) {
-      console.log('🚀 DataProvider: No data present, generating initial batches...');
-      // Generate a few initial batches to get started
-      for (let i = 0; i < 5; i++) {
-        const batch = dataGeneratorRef.current.generateInitialBatch();
-        if (batch.length > 0) {
-          console.log('📦 DataProvider: Processing initial batch', i + 1, 'with', batch.length, 'points');
-          processIncomingData(batch);
-        }
-      }
-      console.log('✅ DataProvider: Initial data generation completed');
-    }
-  }, [state.data.length, state.isLoading, processIncomingData]);
+    const updateTimeRange = () => {
+      const now = Date.now();
+      setState(prev => ({
+        ...prev,
+        timeRange: { start: now - 3600000, end: now + 3600000 } // Keep 1 hour window around current time
+      }));
+    };
+
+    // Update time range every minute to maintain sliding window
+    const interval = setInterval(updateTimeRange, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Actions for external control
   const updateFilters = useCallback((filters: Partial<FilterConfig>) => {
@@ -221,6 +230,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const updateWindowSize = useCallback((size: number) => {
+    setState(prev => ({
+      ...prev,
+      windowSize: Math.max(100, Math.min(10000, size)) // Clamp between 100 and 10000
+    }));
+  }, []);
+
   const clearData = useCallback(() => {
     setState(prev => ({
       ...prev,
@@ -234,12 +250,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return state.data;
   }, [state.data]);
 
+  const getCategoryColor = useCallback((category: string): string => {
+    return state.categoryColors?.[category] || '#666666';
+  }, [state.categoryColors]);
+
   const actions = useMemo(() => ({
     updateFilters,
     updateTimeRange,
+    updateWindowSize,
     clearData,
-    getProcessedData
-  }), [updateFilters, updateTimeRange, clearData, getProcessedData]);
+    getProcessedData,
+    getCategoryColor
+  }), [updateFilters, updateTimeRange, updateWindowSize, clearData, getProcessedData, getCategoryColor]);
 
   // Performance monitoring and memory management
   useEffect(() => {
