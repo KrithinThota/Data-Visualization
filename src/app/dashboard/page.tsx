@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useTransition, Suspense, memo, useDeferredValue } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, memo, useDeferredValue } from 'react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { DashboardProvider, useDashboardContext } from '@/contexts/DashboardContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,7 +14,8 @@ import { DataPoint, FilterOptions, TimeRange, AggregationLevel, DataTableRow, He
 import { useDataStream } from '@/hooks/useDataStream';
 import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
 import { useWorkerFilters } from '@/hooks/useWebWorker';
-import { aggregateDataByTime, filterData, generateHeatmapData } from '@/lib/dataGenerator';
+import { useOptimizedDataProcessing } from '@/hooks/useOptimizedDataProcessing';
+import { generateHeatmapData } from '@/lib/dataGenerator';
 
 // Import chart components
 import LineChart from '@/components/charts/LineChart';
@@ -27,9 +29,23 @@ import TimeRangeSelector from '@/components/controls/TimeRangeSelector';
 import DataTable from '@/components/ui/DataTable';
 import PerformanceMonitor from '@/components/ui/PerformanceMonitor';
 
-const DashboardComponent = () => {
-  // Concurrent rendering with useTransition for non-blocking UI updates
-  const [isPending, startTransition] = useTransition();
+const DashboardContent = () => {
+  // Get dashboard context
+  const {
+    filters,
+    aggregationLevel,
+    showGrid,
+    showAxes,
+    animatedCharts,
+    setFilters,
+    setAggregationLevel,
+    setShowGrid,
+    setShowAxes,
+    setAnimatedCharts,
+    resetFilters,
+    updateTimeRange,
+    filtersKey
+  } = useDashboardContext();
 
   // Data stream state
   const [streamOptions, setStreamOptions] = useState({
@@ -63,13 +79,6 @@ const DashboardComponent = () => {
     workerError,
     clearError
   } = useWorkerFilters();
-
-  // Debug Web Worker status
-  useEffect(() => {
-    if (workerError) {
-      console.error('Web Worker error:', workerError);
-    }
-  }, [workerError]);
   
   // Performance monitoring
   const {
@@ -81,25 +90,15 @@ const DashboardComponent = () => {
     averageRenderTime,
     peakMemoryUsage
   } = usePerformanceMonitor();
-  
-  // Filter and time range state - optimized with useMemo for derived state
-  const [filters, setFilters] = useState<FilterOptions>({
-    categories: [],
-    valueRange: [0, 200],
-    timeRange: {
-      start: Date.now() - 5 * 60 * 1000, // Last 5 minutes
-      end: Date.now()
-    }
-  });
 
-  const [aggregationLevel, setAggregationLevel] = useState<AggregationLevel>({
-    type: 'none',
-    enabled: false
+  // Use optimized data processing hook
+  const { processedData, isProcessing } = useOptimizedDataProcessing({
+    data,
+    filters,
+    aggregationLevel,
+    filtersKey,
+    isWorkerReady
   });
-
-  // Memoized filter state to prevent unnecessary re-renders
-  const memoizedFilters = useMemo(() => filters, [filters.categories.length, filters.valueRange[0], filters.valueRange[1], filters.timeRange.start, filters.timeRange.end]);
-  const memoizedAggregationLevel = useMemo(() => aggregationLevel, [aggregationLevel.type, aggregationLevel.enabled]);
 
   // Memoized expensive computations
   const chartWidth = useMemo(() =>
@@ -109,29 +108,9 @@ const DashboardComponent = () => {
   
   // Chart display options
   const [selectedChart, setSelectedChart] = useState<'line' | 'bar' | 'scatter' | 'heatmap'>('line');
-  const [showGrid, setShowGrid] = useState(true);
-  const [showAxes, setShowAxes] = useState(true);
-  const [animatedCharts, setAnimatedCharts] = useState(false); // Start with animations off for better performance
-  
-  // Data processing state
-  const [processedData, setProcessedData] = useState<DataPoint[]>([]);
-  const [isDataProcessing, setIsDataProcessing] = useState(false);
 
   // Deferred values for non-critical updates (Concurrent Feature)
   const deferredProcessedData = useDeferredValue(processedData);
-
-  // Remove debug logs after fixing - keep only essential ones
-  // TODO: Remove all console.log statements before production
-
-  // Force initial data processing if we have data but no processed data (Concurrent Feature)
-  useEffect(() => {
-    if (data.length > 0 && processedData.length === 0 && !isDataProcessing) {
-      startTransition(() => {
-        setProcessedData([...data]); // Create a copy to ensure reactivity
-        setIsDataProcessing(false); // Ensure processing flag is reset
-      });
-    }
-  }, [data, processedData.length, isDataProcessing, startTransition]);
   
   // Get unique categories from data - memoized to prevent unnecessary recalculations
   const categories = useMemo(() => {
@@ -139,64 +118,6 @@ const DashboardComponent = () => {
     const uniqueCategories = new Set(data.map(point => point.category));
     return Array.from(uniqueCategories).sort();
   }, [data?.length]); // Only depend on data length, not the entire data array
-  
-  // Process data with Web Worker when available - using useTransition for non-blocking updates
-  useEffect(() => {
-    if (!data || data.length === 0) {
-      // Only clear if we don't have any existing processed data
-      if (processedData.length > 0) {
-        startTransition(() => {
-          setProcessedData([]);
-        });
-      }
-      return;
-    }
-
-    setIsDataProcessing(true);
-
-    const processData = async () => {
-      try {
-        let filtered;
-
-        if (isWorkerReady) {
-          filtered = await workerFilterData(data, filters);
-        } else {
-          filtered = filterData(
-            data,
-            filters.categories,
-            filters.valueRange,
-            filters.timeRange
-          );
-        }
-
-        let result = filtered;
-
-        if (aggregationLevel.enabled) {
-          if (isWorkerReady) {
-            result = await workerAggregateData(filtered, aggregationLevel);
-          } else {
-            result = aggregateDataByTime(filtered, aggregationLevel);
-          }
-        }
-
-        // Only update if result is different to prevent unnecessary re-renders
-        startTransition(() => {
-          setProcessedData(result);
-          setIsDataProcessing(false);
-        });
-      } catch (error) {
-        console.error('Error processing data:', error);
-        startTransition(() => {
-          setProcessedData(data);
-          setIsDataProcessing(false);
-        });
-      }
-    };
-
-    const timeoutId = setTimeout(processData, 50);
-
-    return () => clearTimeout(timeoutId);
-  }, [data, memoizedFilters, memoizedAggregationLevel, isWorkerReady, workerFilterData, workerAggregateData, startTransition, processedData.length]);
   
   // Generate heatmap data from processed data with unique keys and grid aggregation
   const heatmapData: HeatmapData[] = useMemo(() => {
@@ -232,7 +153,7 @@ const DashboardComponent = () => {
       value: cell.values.reduce((sum, v) => sum + v, 0) / cell.values.length, // Average value
       label: cell.categories.join(', ')
     }));
-  }, [processedData, filters.timeRange]);
+  }, [processedData?.length, filters.timeRange.start, filters.timeRange.end]);
   
   // Convert to DataTableRow format - memoized for performance with unique IDs
   const tableData: DataTableRow[] = useMemo(() => {
@@ -245,21 +166,6 @@ const DashboardComponent = () => {
       metadata: point.metadata
     }));
   }, [processedData?.length]); // Only depend on length to avoid unnecessary recalculations
-  
-  // Reset filters - memoized callback (React Optimization)
-  const resetFilters = useCallback(() => {
-    startTransition(() => {
-      setFilters({
-        categories: [],
-        valueRange: [0, 200],
-        timeRange: {
-          start: Date.now() - 5 * 60 * 1000,
-          end: Date.now()
-        }
-      });
-      setAggregationLevel({ type: 'none', enabled: false });
-    });
-  }, [startTransition]);
   
   // Handle chart performance updates - memoized callback (React Optimization)
   const handleChartPerformance = useCallback((chartMetrics: any) => {
@@ -291,14 +197,12 @@ const DashboardComponent = () => {
   
   // Start/stop data stream - memoized callback (React Optimization)
   const toggleDataStream = useCallback(() => {
-    startTransition(() => {
-      if (isConnected) {
-        disconnect();
-      } else {
-        connect();
-      }
-    });
-  }, [isConnected, connect, disconnect, startTransition]);
+    if (isConnected) {
+      disconnect();
+    } else {
+      connect();
+    }
+  }, [isConnected, connect, disconnect]);
   
   return (
     <ErrorBoundary>
@@ -322,7 +226,7 @@ const DashboardComponent = () => {
             <Badge variant={isConnected ? "default" : "secondary"}>
               {isConnected ? 'Streaming' : 'Disconnected'}
             </Badge>
-            <Button onClick={toggleDataStream} disabled={isDataProcessing}>
+            <Button onClick={toggleDataStream} disabled={false}>
               {isConnected ? 'Stop Stream' : 'Start Stream'}
             </Button>
           </div>
@@ -434,17 +338,9 @@ const DashboardComponent = () => {
               <div className="space-y-6 mt-4 lg:mt-0">
                 <FilterPanel
                   categories={categories}
-                  filters={filters}
-                  onFiltersChange={setFilters}
-                  onReset={resetFilters}
                 />
                 
-                <TimeRangeSelector
-                  selectedRange={filters.timeRange}
-                  aggregationLevel={aggregationLevel}
-                  onRangeChange={(range) => setFilters(prev => ({ ...prev, timeRange: range }))}
-                  onAggregationChange={setAggregationLevel}
-                />
+                <TimeRangeSelector />
               </div>
             </details>
             
@@ -452,17 +348,9 @@ const DashboardComponent = () => {
             <div className="hidden lg:block space-y-6">
               <FilterPanel
                 categories={categories}
-                filters={filters}
-                onFiltersChange={setFilters}
-                onReset={resetFilters}
               />
               
-              <TimeRangeSelector
-                selectedRange={filters.timeRange}
-                aggregationLevel={aggregationLevel}
-                onRangeChange={(range) => setFilters(prev => ({ ...prev, timeRange: range }))}
-                onAggregationChange={setAggregationLevel}
-              />
+              <TimeRangeSelector />
             </div>
           </div>
           
@@ -566,7 +454,7 @@ const DashboardComponent = () => {
               height={300}
               searchable={true}
               sortable={true}
-              isLoading={isDataProcessing}
+              isLoading={isProcessing}
               paginated={true}
               pageSize={50}
             />
@@ -616,6 +504,14 @@ const DashboardComponent = () => {
         </div>
       </Suspense>
     </ErrorBoundary>
+  );
+};
+
+const DashboardComponent = () => {
+  return (
+    <DashboardProvider>
+      <DashboardContent />
+    </DashboardProvider>
   );
 };
 

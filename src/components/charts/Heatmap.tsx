@@ -26,6 +26,7 @@ const HeatmapComponent = ({
 }: HeatmapProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
+  const renderCallbackRef = useRef<(() => void) | null>(null);
   
   const viewport: ViewportSize = useMemo(() => ({ width, height }), [width, height]);
   
@@ -56,7 +57,7 @@ const HeatmapComponent = ({
         dataPointsCount: data.length
       });
     }
-  }, [viewport, data, colorScale, cellSize, onPerformanceUpdate]);
+  }, [viewport, colorScale, cellSize, data.length]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -75,12 +76,9 @@ const HeatmapComponent = ({
       ctx.scale(dpr, dpr);
     }
     
+    renderCallbackRef.current = render;
     render();
   }, [width, height, render]);
-  
-  useEffect(() => {
-    render();
-  }, [data, render]);
   
   useEffect(() => {
     if (!animated) {
@@ -91,7 +89,9 @@ const HeatmapComponent = ({
     }
     
     const animate = () => {
-      render();
+      if (renderCallbackRef.current) {
+        renderCallbackRef.current();
+      }
       animationRef.current = requestAnimationFrame(animate);
     };
     
@@ -103,7 +103,14 @@ const HeatmapComponent = ({
         animationRef.current = null;
       }
     };
-  }, [animated, render]);
+  }, [animated]);
+
+  // Separate effect for data changes
+  useEffect(() => {
+    if (!animated && renderCallbackRef.current) {
+      renderCallbackRef.current();
+    }
+  }, [data.length, animated]);
   
   return (
     <div className="relative inline-block" style={{ width, height }}>

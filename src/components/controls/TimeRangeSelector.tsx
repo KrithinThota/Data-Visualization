@@ -1,17 +1,11 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TimeRange, AggregationLevel } from '@/lib/types';
-
-interface TimeRangeSelectorProps {
-  selectedRange: TimeRange;
-  aggregationLevel: AggregationLevel;
-  onRangeChange: (range: TimeRange) => void;
-  onAggregationChange: (level: AggregationLevel) => void;
-}
+import { useDashboardContext } from '@/contexts/DashboardContext';
 
 const PRESET_RANGES = [
   { label: 'Last 5 min', duration: 5 * 60 * 1000 },
@@ -29,17 +23,14 @@ const AGGREGATION_LEVELS: Array<{ type: AggregationLevel['type']; label: string 
   { type: '1hour', label: '1 Hour' },
 ];
 
-export default function TimeRangeSelector({
-  selectedRange,
-  aggregationLevel,
-  onRangeChange,
-  onAggregationChange
-}: TimeRangeSelectorProps) {
+const TimeRangeSelector = memo(() => {
+  const { filters, aggregationLevel, updateTimeRange, setAggregationLevel } = useDashboardContext();
+  const selectedRange = filters.timeRange;
   const handlePresetRange = useCallback((duration: number) => {
     const end = Date.now();
     const start = end - duration;
-    onRangeChange({ start, end });
-  }, [onRangeChange]);
+    updateTimeRange({ start, end });
+  }, [updateTimeRange]);
   
   const handleCustomRange = useCallback((type: 'start' | 'end', value: string) => {
     const timestamp = new Date(value).getTime();
@@ -57,15 +48,15 @@ export default function TimeRangeSelector({
       newRange.start = timestamp - (selectedRange.end - selectedRange.start);
     }
 
-    onRangeChange(newRange);
-  }, [selectedRange, onRangeChange]);
+    updateTimeRange(newRange);
+  }, [selectedRange, updateTimeRange]);
   
   const handleAggregationToggle = useCallback((type: AggregationLevel['type']) => {
-    onAggregationChange({
+    setAggregationLevel({
       type,
       enabled: type !== 'none'
     });
-  }, [onAggregationChange]);
+  }, [setAggregationLevel]);
   
   const formatDuration = (ms: number): string => {
     const minutes = Math.floor(ms / (60 * 1000));
@@ -161,4 +152,8 @@ export default function TimeRangeSelector({
       </CardContent>
     </Card>
   );
-}
+});
+
+TimeRangeSelector.displayName = 'TimeRangeSelector';
+
+export default TimeRangeSelector;

@@ -1,24 +1,17 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FilterOptions } from '@/lib/types';
+import { useDashboardContext } from '@/contexts/DashboardContext';
 
 interface FilterPanelProps {
   categories: string[];
-  filters: FilterOptions;
-  onFiltersChange: (filters: FilterOptions) => void;
-  onReset: () => void;
 }
 
-export default function FilterPanel({
-  categories,
-  filters,
-  onFiltersChange,
-  onReset
-}: FilterPanelProps) {
+const FilterPanel = memo(({ categories }: FilterPanelProps) => {
+  const { filters, setFilters, resetFilters } = useDashboardContext();
   const [localValueRange, setLocalValueRange] = useState<[number, number]>(
     filters.valueRange
   );
@@ -28,11 +21,11 @@ export default function FilterPanel({
       ? filters.categories.filter(c => c !== category)
       : [...filters.categories, category];
     
-    onFiltersChange({
+    setFilters({
       ...filters,
       categories: newCategories
     });
-  }, [filters, onFiltersChange]);
+  }, [filters, setFilters]);
   
   const handleValueRangeChange = useCallback((type: 'min' | 'max', value: string) => {
     const numValue = parseFloat(value) || 0;
@@ -44,24 +37,24 @@ export default function FilterPanel({
   }, [localValueRange]);
   
   const applyValueRange = useCallback(() => {
-    onFiltersChange({
+    setFilters({
       ...filters,
       valueRange: localValueRange
     });
-  }, [filters, localValueRange, onFiltersChange]);
+  }, [filters, localValueRange, setFilters]);
   
   const handleTimeRangeChange = useCallback((type: 'start' | 'end', value: string) => {
     const timestamp = new Date(value).getTime();
     if (isNaN(timestamp)) return;
     
-    onFiltersChange({
+    setFilters({
       ...filters,
       timeRange: {
         ...filters.timeRange,
         [type]: timestamp
       }
     });
-  }, [filters, onFiltersChange]);
+  }, [filters, setFilters]);
   
   return (
     <Card className="w-full">
@@ -89,7 +82,7 @@ export default function FilterPanel({
               variant="ghost"
               size="sm"
               className="mt-2"
-              onClick={() => onFiltersChange({ ...filters, categories: [] })}
+              onClick={() => setFilters({ ...filters, categories: [] })}
             >
               Clear Categories
             </Button>
@@ -148,11 +141,15 @@ export default function FilterPanel({
         
         {/* Reset Button */}
         <div className="pt-4 border-t">
-          <Button variant="outline" onClick={onReset} className="w-full">
+          <Button variant="outline" onClick={resetFilters} className="w-full">
             Reset All Filters
           </Button>
         </div>
       </CardContent>
     </Card>
   );
-}
+});
+
+FilterPanel.displayName = 'FilterPanel';
+
+export default FilterPanel;

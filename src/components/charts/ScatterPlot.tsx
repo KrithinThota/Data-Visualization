@@ -39,13 +39,14 @@ const ScatterPlotComponent = ({
 }: ScatterPlotProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
+  const renderCallbackRef = useRef<(() => void) | null>(null);
   
   const viewport: ViewportSize = useMemo(() => ({ width, height }), [width, height]);
   
   const chartBounds = useMemo(() => {
     if (data.length === 0) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
     return calculateChartBounds(data);
-  }, [data]);
+  }, [data.length]); // Only recalculate when length changes
   
   const mappedPoints = useMemo(() => {
     if (data.length === 0) return [];
@@ -54,7 +55,7 @@ const ScatterPlotComponent = ({
       const size = point.metadata?.size || pointSize;
       return { ...mapped, size };
     });
-  }, [data, chartBounds, viewport, pointSize]);
+  }, [data.length, chartBounds, viewport, pointSize]);
   
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -91,7 +92,7 @@ const ScatterPlotComponent = ({
         dataPointsCount: data.length
       });
     }
-  }, [viewport, chartBounds, mappedPoints, showGrid, showAxes, color, pointSize, opacity, onPerformanceUpdate, data.length]);
+  }, [viewport, chartBounds, showGrid, showAxes, color, pointSize, opacity, data.length]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -110,12 +111,9 @@ const ScatterPlotComponent = ({
       ctx.scale(dpr, dpr);
     }
     
+    renderCallbackRef.current = render;
     render();
   }, [width, height, render]);
-  
-  useEffect(() => {
-    render();
-  }, [data, render]);
   
   useEffect(() => {
     if (!animated) {
@@ -126,7 +124,9 @@ const ScatterPlotComponent = ({
     }
     
     const animate = () => {
-      render();
+      if (renderCallbackRef.current) {
+        renderCallbackRef.current();
+      }
       animationRef.current = requestAnimationFrame(animate);
     };
     
@@ -138,7 +138,14 @@ const ScatterPlotComponent = ({
         animationRef.current = null;
       }
     };
-  }, [animated, render]);
+  }, [animated]);
+
+  // Separate effect for data changes
+  useEffect(() => {
+    if (!animated && renderCallbackRef.current) {
+      renderCallbackRef.current();
+    }
+  }, [data.length, animated]);
   
   return (
     <div className="relative inline-block" style={{ width, height }}>

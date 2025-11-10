@@ -36,12 +36,13 @@ const BarChartComponent = ({
 }: BarChartProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
+  const renderCallbackRef = useRef<(() => void) | null>(null);
   
   const viewport: ViewportSize = useMemo(() => ({ width, height }), [width, height]);
   
   const chartBounds = useMemo(() => {
     return calculateChartBounds(data);
-  }, [data]);
+  }, [data.length]); // Only recalculate when length changes
   
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -78,7 +79,7 @@ const BarChartComponent = ({
         dataPointsCount: data.length
       });
     }
-  }, [viewport, chartBounds, data, showGrid, showAxes, color, barWidth, onPerformanceUpdate]);
+  }, [viewport, chartBounds, showGrid, showAxes, color, barWidth, data.length]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -97,12 +98,9 @@ const BarChartComponent = ({
       ctx.scale(dpr, dpr);
     }
     
+    renderCallbackRef.current = render;
     render();
   }, [width, height, render]);
-  
-  useEffect(() => {
-    render();
-  }, [data, render]);
   
   useEffect(() => {
     if (!animated) {
@@ -113,7 +111,9 @@ const BarChartComponent = ({
     }
     
     const animate = () => {
-      render();
+      if (renderCallbackRef.current) {
+        renderCallbackRef.current();
+      }
       animationRef.current = requestAnimationFrame(animate);
     };
     
@@ -125,7 +125,14 @@ const BarChartComponent = ({
         animationRef.current = null;
       }
     };
-  }, [animated, render]);
+  }, [animated]);
+
+  // Separate effect for data changes
+  useEffect(() => {
+    if (!animated && renderCallbackRef.current) {
+      renderCallbackRef.current();
+    }
+  }, [data.length, animated]);
   
   return (
     <div className="relative inline-block" style={{ width, height }}>

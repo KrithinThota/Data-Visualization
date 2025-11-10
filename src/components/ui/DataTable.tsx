@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ interface DataTableProps {
    pageSize?: number;
  }
 
-export default function DataTable({
+const DataTable = memo(function DataTable({
    data,
    height = 400,
    itemHeight = 40,
@@ -33,7 +33,7 @@ export default function DataTable({
    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
    const [currentPage, setCurrentPage] = useState(1);
 
-  // Filter data based on search term
+  // Filter data based on search term - optimize by checking data length
   const filteredData = useMemo(() => {
     if (!searchTerm) return data;
 
@@ -44,7 +44,7 @@ export default function DataTable({
       row.value.toString().includes(lowerSearchTerm) ||
       new Date(row.timestamp).toLocaleString().toLowerCase().includes(lowerSearchTerm)
     );
-  }, [data, searchTerm]);
+  }, [data.length, searchTerm]); // Only depend on data.length for better performance
 
   // Sort data
   const sortedData = useMemo(() => {
@@ -67,7 +67,7 @@ export default function DataTable({
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filteredData, sortable, sortColumn, sortDirection]);
+  }, [filteredData.length, sortable, sortColumn, sortDirection]);
 
   // Pagination logic
   const totalPages = Math.ceil(sortedData.length / pageSize);
@@ -207,14 +207,17 @@ export default function DataTable({
             onScroll={handleScroll}
           >
             <div style={{ height: `${totalHeight}px`, position: 'relative' }}>
-              {visibleItems.map((item, index) => (
+              {visibleItems.map((item, index) => {
+                const top = (visibleRange.start + index) * itemHeight;
+                return (
                  <div
                    key={item.id}
                    className="absolute w-full border-b hover:bg-gray-50"
                    style={{
                      height: `${itemHeight}px`,
-                     top: `${(visibleRange.start + index) * itemHeight}px`,
-                     transform: 'translateZ(0)' // Hardware acceleration
+                     top: `${top}px`,
+                     transform: 'translateZ(0)', // Hardware acceleration
+                     willChange: 'transform' // Hint for browser optimization
                    }}
                  >
                    <div className="flex h-full items-center px-2">
@@ -230,7 +233,8 @@ export default function DataTable({
                      ))}
                    </div>
                  </div>
-               ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -309,4 +313,6 @@ export default function DataTable({
       </CardContent>
     </Card>
   );
-}
+});
+
+export default DataTable;

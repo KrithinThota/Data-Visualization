@@ -41,18 +41,19 @@ const LineChartComponent = ({
   const animationRef = useRef<number | null>(null);
   const lastRenderTimeRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
+  const renderCallbackRef = useRef<(() => void) | null>(null);
 
   const viewport: ViewportSize = useMemo(() => ({ width, height }), [width, height]);
 
   const chartBounds = useMemo(() => {
     if (data.length === 0) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
     return calculateChartBounds(data);
-  }, [data]);
+  }, [data.length]); // Only recalculate when data length changes
 
   const mappedPoints = useMemo(() => {
     if (data.length === 0) return [];
     return data.map(point => mapDataToCanvas(point, chartBounds, viewport));
-  }, [data, chartBounds, viewport]);
+  }, [data.length, chartBounds, viewport]); // Use data.length instead of full data array
   
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -96,7 +97,7 @@ const LineChartComponent = ({
         });
       }
     }
-  }, [viewport, chartBounds, mappedPoints, showGrid, showAxes, color, lineWidth, smooth, onPerformanceUpdate, data.length]);
+  }, [viewport, chartBounds, showGrid, showAxes, color, lineWidth, smooth, data.length]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -115,12 +116,10 @@ const LineChartComponent = ({
       ctx.scale(dpr, dpr);
     }
     
+    // Store render callback in ref for animation loop
+    renderCallbackRef.current = render;
     render();
   }, [width, height, render]);
-  
-  useEffect(() => {
-    render();
-  }, [data, render]);
   
   useEffect(() => {
     if (!animated) {
@@ -132,7 +131,10 @@ const LineChartComponent = ({
     }
     
     const animate = () => {
-      render();
+      // Use ref to avoid dependency on render function
+      if (renderCallbackRef.current) {
+        renderCallbackRef.current();
+      }
       animationRef.current = requestAnimationFrame(animate);
     };
     
@@ -144,7 +146,14 @@ const LineChartComponent = ({
         animationRef.current = null;
       }
     };
-  }, [animated, render]);
+  }, [animated]);
+
+  // Separate effect for data changes
+  useEffect(() => {
+    if (!animated && renderCallbackRef.current) {
+      renderCallbackRef.current();
+    }
+  }, [data.length, animated]);
   
   // Seamless transition between no-data and chart states
   return (
